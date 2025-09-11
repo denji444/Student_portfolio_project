@@ -24,11 +24,19 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/profile', profileRoutes);
 
-const port = process.env.PORT ? Number(process.env.PORT) : 4000;
+const port = Number(process.env.PORT) || 4000;
+const host = '0.0.0.0';
 
-app.listen(port, () => {
+// Basic request logger to help diagnose 503s
+app.use((req, _res, next) => {
   // eslint-disable-next-line no-console
-  console.log(`Backend listening on http://localhost:${port}`);
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
+app.listen(port, host, () => {
+  // eslint-disable-next-line no-console
+  console.log(`Backend listening on http://${host}:${port} (PORT env=${process.env.PORT || 'undefined'})`);
 });
 
 

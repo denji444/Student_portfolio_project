@@ -12,6 +12,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=20 <21"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.2",
     "@types/jsonwebtoken": "^9.0.10",
