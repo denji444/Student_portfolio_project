@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import NeoNav from '@/components/design3/NeoNav';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,7 @@ const AdminDashboard = () => {
   const [studentProjects, setStudentProjects] = useState<StudentProject[]>([]);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailProject, setDetailProject] = useState<any | null>(null);
+  const moderationRef = useRef<HTMLDivElement | null>(null);
   const { toast } = useToast();
 
   const adminHeaders = () => {
@@ -58,7 +60,7 @@ const AdminDashboard = () => {
 
   const updateStudent = async (s: Student) => {
     try {
-      const body = { fullName: s.full_name, phone: s.phone, profileImageUrl: s.profile_image_url ?? undefined };
+      const body = { fullName: s.full_name, phone: s.phone };
       const res = await fetch(`${API_BASE_URL}/api/admin/students/${s.id}`, { method: 'PUT', headers: adminHeaders(), body: JSON.stringify(body) });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || 'Update failed');
@@ -86,6 +88,19 @@ const AdminDashboard = () => {
       if (!res.ok) throw new Error(json?.error || 'Delete failed');
       setStudents(prev => prev.filter(s => s.id !== studentId));
       toast({ title: 'Student deleted' });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    }
+  };
+
+  const resetPassword = async (studentId: string) => {
+    const newPassword = prompt('Enter a temporary password (min 8 chars):');
+    if (!newPassword || newPassword.length < 8) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/students/${studentId}/reset-password`, { method: 'POST', headers: adminHeaders(), body: JSON.stringify({ newPassword }) });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || 'Reset failed');
+      toast({ title: 'Password reset', description: 'Temporary password set.' });
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
@@ -144,6 +159,10 @@ const AdminDashboard = () => {
         setComments([]);
         setSelectedProjectId('');
       }
+      // Smoothly scroll to the Project Moderation section
+      if (moderationRef.current) {
+        moderationRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
@@ -164,8 +183,9 @@ const AdminDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
+      <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+        <NeoNav />
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">Admin Dashboard</h1>
           <Button variant="destructive" onClick={logout}>Logout</Button>
@@ -183,7 +203,7 @@ const AdminDashboard = () => {
               <p className="text-muted-foreground">No students found.</p>
             ) : (
               filtered.map((s) => (
-                <div key={s.id} className="grid grid-cols-1 md:grid-cols-6 gap-3 items-center border rounded p-3">
+                <div key={s.id} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-center border rounded p-3">
                   <div className="flex items-center gap-3 md:col-span-2 min-w-0">
                     {s.profile_image_url ? (
                       <img src={s.profile_image_url} className="h-10 w-10 rounded-full object-cover" />
@@ -201,13 +221,12 @@ const AdminDashboard = () => {
                   <div className="md:col-span-1 min-w-0">
                     <Input className="w-full" value={s.phone ?? ''} onChange={(e)=>setStudents(prev => prev.map(p=>p.id===s.id?{...p, phone:e.target.value}:p))} />
                   </div>
-                  <div className="md:col-span-1 min-w-0">
-                    <Input className="w-full" value={s.profile_image_url ?? ''} onChange={(e)=>setStudents(prev => prev.map(p=>p.id===s.id?{...p, profile_image_url:e.target.value}:p))} />
-                  </div>
+                  {/* Removed Profile Image URL input for admin view */}
                   <div className="md:col-span-1 flex flex-wrap gap-2 justify-end md:justify-start">
                     <Button size="sm" className="bg-success text-success-foreground hover:bg-success" onClick={()=>updateStudent(s)}>Save</Button>
                     <Button size="sm" variant="destructive" onClick={()=>deleteStudent(s.id)}>Delete</Button>
                     <Button size="sm" variant="secondary" onClick={()=>loadStudentProjects(s.id)}>View Projects</Button>
+                    <Button size="sm" variant="outline" onClick={()=>resetPassword(s.id)}>Reset Password</Button>
                   </div>
                 </div>
               ))
@@ -227,12 +246,12 @@ const AdminDashboard = () => {
                 {detailProject.projectType || detailProject.project_type ? (
                   <div className="text-muted-foreground">Project Type: {detailProject.projectType || detailProject.project_type}</div>
                 ) : null}
-                {detailProject.video_url || detailProject.image_url ? (
+                {detailProject.videoUrl || detailProject.imageUrl ? (
                   <div className="aspect-video rounded bg-muted overflow-hidden">
-                    {detailProject.video_url ? (
-                      <iframe src={detailProject.video_url} className="w-full h-full" allowFullScreen title={`${detailProject.title} demo`} />
+                    {detailProject.videoUrl ? (
+                      <iframe src={detailProject.videoUrl} className="w-full h-full" allowFullScreen title={`${detailProject.title} demo`} />
                     ) : (
-                      <img src={detailProject.image_url} alt={detailProject.title} className="w-full h-full object-cover" />
+                      <img src={detailProject.imageUrl} alt={detailProject.title} className="w-full h-full object-cover" />
                     )}
                   </div>
                 ) : null}
@@ -282,7 +301,7 @@ const AdminDashboard = () => {
           </DialogContent>
         </Dialog>
 
-        <Card>
+        <Card ref={moderationRef}>
           <CardHeader>
             <h2 className="text-xl font-semibold">Project Moderation</h2>
           </CardHeader>

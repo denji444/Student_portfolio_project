@@ -1,0 +1,3 @@
+- in student profiles i cannot update the password because of missing auth
+- make profile image url is not compulsory to update profile data 
+- add a 

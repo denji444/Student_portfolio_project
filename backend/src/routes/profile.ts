@@ -91,12 +91,13 @@ router.post('/change-password', requireAuth, async (req: any, res) => {
     const { data: user, error: userErr } = await userClient.auth.getUser();
     if (userErr || !user.user) return res.status(401).json({ error: 'Invalid token' });
     const email = user.user.email;
+    const userId = user.user.id;
     if (!email) return res.status(400).json({ error: 'Email missing on user' });
     // verify current password
     const { error: verifyErr } = await publicClient.auth.signInWithPassword({ email, password: parsed.data.currentPassword });
     if (verifyErr) return res.status(401).json({ error: 'Current password is incorrect' });
-    // update password
-    const { error: updErr } = await userClient.auth.updateUser({ password: parsed.data.newPassword });
+    // update password via admin client to avoid session issues
+    const { error: updErr } = await adminClient.auth.admin.updateUserById(userId, { password: parsed.data.newPassword });
     if (updErr) throw updErr;
     return res.json({ message: 'Password updated' });
   } catch (err: any) {

@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { TopNav } from '@/components/layout/TopNav';
+import NeoNav from '@/components/design3/NeoNav';
 import { getMyProjects, createProject, updateProject, deleteProject } from '@/lib/api';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/lib/supabaseClient';
 
-const emptyForm = { title:'', description:'', technologies:'', projectType:'', githubUrl:'', deploymentUrl:'', status:'planned' as const };
+const emptyForm = { title:'', description:'', technologies:'', projectType:'', githubUrl:'', deploymentUrl:'', imageUrl:'', status:'planned' as const };
+const THUMBNAILS_BUCKET = (import.meta.env.VITE_SUPABASE_THUMBNAILS_BUCKET as string) || 'thumbnails';
 
 const Dashboard = () => {
   const { toast } = useToast();
@@ -16,6 +18,12 @@ const Dashboard = () => {
   const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [uploadingThumb, setUploadingThumb] = useState(false);
+  // Ensure Supabase auth session is initialized for Storage RLS
+  if (token) {
+    const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refreshToken') : null;
+    if (refreshToken) void supabase.auth.setSession({ access_token: token, refresh_token: refreshToken });
+  }
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['my-projects'],
@@ -31,6 +39,7 @@ const Dashboard = () => {
       projectType: form.projectType || undefined,
       githubUrl: form.githubUrl || undefined,
       deploymentUrl: form.deploymentUrl || undefined,
+      imageUrl: form.imageUrl || undefined,
       status: form.status,
     }),
     onSuccess: () => { setForm(emptyForm); qc.invalidateQueries({ queryKey: ['my-projects'] }); toast({ title: 'Project created' }); },
@@ -45,6 +54,7 @@ const Dashboard = () => {
       projectType: form.projectType || undefined,
       githubUrl: form.githubUrl || undefined,
       deploymentUrl: form.deploymentUrl || undefined,
+      imageUrl: form.imageUrl || undefined,
       status: form.status,
     }),
     onSuccess: () => { setEditingId(null); setForm(emptyForm); qc.invalidateQueries({ queryKey: ['my-projects'] }); toast({ title: 'Project updated' }); },
@@ -66,26 +76,29 @@ const Dashboard = () => {
       githubUrl: p.github_url ?? p.githubUrl ?? '',
       deploymentUrl: p.deployment_url ?? p.deploymentUrl ?? '',
       projectType: p.project_type ?? p.projectType ?? '',
+      imageUrl: p.image_url ?? p.imageUrl ?? '',
       status: p.status ?? 'planned',
     });
   };
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-background">
-        <TopNav showHome={true} showAuth={true} showLogout={false} />
-        <div className="max-w-3xl mx-auto p-6 text-center">
+      <div className="min-h-screen bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
+        <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+          <NeoNav />
+          <div className="max-w-3xl mx-auto p-6 text-center">
           <h2 className="text-2xl font-semibold mb-2">Please sign in</h2>
           <p className="text-muted-foreground">You must sign in to access your dashboard.</p>
-        </div>
+          </div>
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <TopNav showHome={true} showAuth={false} showLogout={true} />
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
+      <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+        <NeoNav />
         <Card>
           <CardHeader>
             <h3 className="text-xl font-semibold">{editingId ? 'Edit Project' : 'Add New Project'}</h3>
@@ -94,6 +107,45 @@ const Dashboard = () => {
             <div>
               <label className="text-sm font-medium">Title</label>
               <Input placeholder="Name your project" value={form.title} onChange={e=>setForm({...form, title:e.target.value})} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Thumbnail (optional)</label>
+              <div className="flex items-center gap-3 mt-2">
+                <div className="h-20 w-32 rounded-md overflow-hidden bg-muted border">
+                  {form.imageUrl ? (
+                    <img src={form.imageUrl} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="h-full w-full grid place-items-center text-[11px] text-muted-foreground">Preview</div>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <Input type="file" accept="image/*" disabled={uploadingThumb}
+                    onChange={async (e)=>{
+                      const inputEl = e.target as HTMLInputElement;
+                      const file = inputEl.files?.[0];
+                      if (!file) return;
+                      setUploadingThumb(true);
+                      try {
+                        const ext = file.name.split('.').pop() || 'jpg';
+                        // Many Supabase setups require uploading to a flat or foldered path inside the bucket;
+                        // remove leading 'public/' from path. Use a 'uploads/' prefix for organization.
+                        const path = `uploads/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+                        const { error } = await supabase.storage.from(THUMBNAILS_BUCKET).upload(path, file, { upsert: true, contentType: file.type });
+                        if (error) throw error;
+                        const { data: pub } = supabase.storage.from(THUMBNAILS_BUCKET).getPublicUrl(path);
+                        setForm({ ...form, imageUrl: pub.publicUrl });
+                        toast({ title: 'Thumbnail uploaded' });
+                      } catch (err:any) {
+                        toast({ title: 'Upload failed', description: err.message || 'Could not upload thumbnail', variant: 'destructive' });
+                      } finally {
+                        setUploadingThumb(false);
+                        // clear input to allow re-upload same file name
+                        if (inputEl) inputEl.value = '' as any;
+                      }
+                    }} />
+                  <div className="text-xs text-muted-foreground">Stored in Supabase and shown on home cards. Not used for profile picture.</div>
+                </div>
+              </div>
             </div>
             <div>
               <label className="text-sm font-medium">Description</label>

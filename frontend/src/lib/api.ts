@@ -1,6 +1,9 @@
 import type { Project } from '@/types/portfolio';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string;
+// Resolve API base URL for dev/prod. Fallback to same-origin relative 
+// path when no env is provided, and to localhost:4000 in local dev.
+const envUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
+const API_BASE_URL = envUrl || (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? 'http://localhost:4000' : '');
 
 type PublicProjectApi = {
   id: string;

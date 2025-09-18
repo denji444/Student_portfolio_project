@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Link, useNavigate } from 'react-router-dom';
-import { TopNav } from '@/components/layout/TopNav';
+import { Eye, EyeOff } from 'lucide-react';
+import NeoNav from '@/components/design3/NeoNav';
+import { supabase } from '@/lib/supabaseClient';
 
 const signupSchema = z.object({
   fullName: z.string().min(1, 'Full name is required'),
@@ -38,6 +40,9 @@ const Auth = () => {
   const [mode, setMode] = useState<'signin'|'signup'>('signup');
   const [signupForm, setSignupForm] = useState({ fullName:'', rollNumber:'', email:'', phone:'', password:'', confirmPassword:'' });
   const [signinForm, setSigninForm] = useState({ email:'', password:'' });
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showSignupConfirm, setShowSignupConfirm] = useState(false);
+  const [showSigninPassword, setShowSigninPassword] = useState(false);
 
   const signupMutation = useMutation({
     mutationFn: signup,
@@ -51,6 +56,10 @@ const Auth = () => {
   const signinMutation = useMutation({
     mutationFn: signin,
     onSuccess: (res) => {
+      // Initialize Supabase client session so Storage RLS allows uploads
+      if (res.accessToken && res.refreshToken) {
+        void supabase.auth.setSession({ access_token: res.accessToken, refresh_token: res.refreshToken });
+      }
       localStorage.setItem('accessToken', res.accessToken);
       if (res.refreshToken) localStorage.setItem('refreshToken', res.refreshToken);
       toast({ title: 'Signed in' });
@@ -82,9 +91,10 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <TopNav showHome={true} showAuth={false} />
-      <div className="flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
+      <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+        <NeoNav />
+        <div className="flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardHeader>
             <div className="flex gap-2">
@@ -108,10 +118,20 @@ const Auth = () => {
                   <Input placeholder="03XXXXXXXXX" value={signupForm.phone} onChange={e=>setSignupForm({...signupForm, phone:e.target.value})} />
                 </Field>
                 <Field label="Password" required>
-                  <Input type="password" value={signupForm.password} onChange={e=>setSignupForm({...signupForm, password:e.target.value})} />
+                  <div className="relative">
+                    <Input type={showSignupPassword ? 'text' : 'password'} value={signupForm.password} onChange={e=>setSignupForm({...signupForm, password:e.target.value})} className="pr-10" />
+                    <button type="button" className="absolute inset-y-0 right-0 px-3 text-muted-foreground" onClick={()=>setShowSignupPassword(v=>!v)} aria-label={showSignupPassword ? 'Hide password' : 'Show password'}>
+                      {showSignupPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </Field>
                 <Field label="Confirm password" required>
-                  <Input type="password" value={signupForm.confirmPassword} onChange={e=>setSignupForm({...signupForm, confirmPassword:e.target.value})} />
+                  <div className="relative">
+                    <Input type={showSignupConfirm ? 'text' : 'password'} value={signupForm.confirmPassword} onChange={e=>setSignupForm({...signupForm, confirmPassword:e.target.value})} className="pr-10" />
+                    <button type="button" className="absolute inset-y-0 right-0 px-3 text-muted-foreground" onClick={()=>setShowSignupConfirm(v=>!v)} aria-label={showSignupConfirm ? 'Hide password' : 'Show password'}>
+                      {showSignupConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </Field>
                 <Button type="submit" className="w-full" disabled={signupMutation.isLoading}>Create account</Button>
               </form>
@@ -121,14 +141,20 @@ const Auth = () => {
                   <Input type="email" value={signinForm.email} onChange={e=>setSigninForm({...signinForm, email:e.target.value})} />
                 </Field>
                 <Field label="Password" required>
-                  <Input type="password" value={signinForm.password} onChange={e=>setSigninForm({...signinForm, password:e.target.value})} />
+                  <div className="relative">
+                    <Input type={showSigninPassword ? 'text' : 'password'} value={signinForm.password} onChange={e=>setSigninForm({...signinForm, password:e.target.value})} className="pr-10" />
+                    <button type="button" className="absolute inset-y-0 right-0 px-3 text-muted-foreground" onClick={()=>setShowSigninPassword(v=>!v)} aria-label={showSigninPassword ? 'Hide password' : 'Show password'}>
+                      {showSigninPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </Field>
                 <Button type="submit" className="w-full" disabled={signinMutation.isLoading}>Sign in</Button>
               </form>
             )}
           </CardContent>
         </Card>
-      </div>
+        </div>
+      </main>
     </div>
   );
 };

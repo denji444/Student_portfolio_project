@@ -192,3 +192,17 @@ router.delete('/projects/:projectId/comments/:commentId', requireAdmin, async (r
 });
 
 export default router;
+
+// Password reset (admin sets a temporary new password)
+router.post('/students/:id/reset-password', requireAdmin, async (req, res) => {
+  const id = req.params.id;
+  const body = z.object({ newPassword: z.string().min(8) }).safeParse(req.body);
+  if (!body.success) return res.status(400).json({ error: 'Invalid input' });
+  try {
+    const { error } = await adminClient.auth.admin.updateUserById(id, { password: body.data.newPassword });
+    if (error) throw error;
+    return res.json({ message: 'Password reset' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message ?? 'Internal error' });
+  }
+});
