@@ -20,6 +20,7 @@ create table if not exists public.projects (
   title text not null,
   description text not null,
   technologies text[] not null default '{}',
+  functional_requirements text[] not null default '{}',
   project_type text,
   github_url text,
   deployment_url text,
@@ -74,5 +75,10 @@ do $$ begin
     for delete using (auth.uid() = user_id);
   exception when duplicate_object then null; end;
 end $$;
+
+
+-- Ensure column exists when updating an existing database
+alter table if exists public.projects
+  add column if not exists functional_requirements text[] not null default '{}';
 
 

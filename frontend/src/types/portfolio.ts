@@ -3,6 +3,7 @@ export interface Project {
   title: string;
   description: string;
   technologies: string[];
+  functionalRequirements?: string[];
   projectType?: string;
   imageUrl?: string;
   videoUrl?: string;

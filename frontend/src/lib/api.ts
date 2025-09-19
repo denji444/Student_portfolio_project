@@ -31,6 +31,7 @@ export async function fetchPublicProjects(): Promise<Project[]> {
     title: p.title,
     description: p.description,
     technologies: p.technologies ?? [],
+    functionalRequirements: p.functionalRequirements ?? p.functional_requirements ?? [],
     projectType: p.projectType ?? p.project_type ?? undefined,
     githubUrl: p.githubUrl ?? p.github_url ?? undefined,
     deploymentUrl: p.deploymentUrl ?? p.deployment_url ?? undefined,
@@ -47,6 +48,7 @@ export async function fetchPublicProjects(): Promise<Project[]> {
     title: p.title,
     description: p.description,
     technologies: p.technologies,
+    functionalRequirements: p.functionalRequirements,
     projectType: p.projectType,
     githubUrl: p.githubUrl,
     deploymentUrl: p.deploymentUrl,
@@ -138,6 +140,7 @@ export async function getMyProjects() {
 
 export async function createProject(input: {
   title: string; description: string; technologies: string[];
+  functionalRequirements?: string[];
   projectType?: string; githubUrl?: string; deploymentUrl?: string; imageUrl?: string; videoUrl?: string; status?: 'completed'|'in-progress'|'planned';
 }) {
   const res = await requestWithAuth(`${API_BASE_URL}/api/projects`, { method: 'POST', body: JSON.stringify(input) });
@@ -148,6 +151,7 @@ export async function createProject(input: {
 
 export async function updateProject(id: string, input: Partial<{
   title: string; description: string; technologies: string[];
+  functionalRequirements?: string[];
   projectType?: string; githubUrl?: string; deploymentUrl?: string; imageUrl?: string; videoUrl?: string; status?: 'completed'|'in-progress'|'planned';
 }>) {
   const res = await requestWithAuth(`${API_BASE_URL}/api/projects/${id}`, { method: 'PUT', body: JSON.stringify(input) });

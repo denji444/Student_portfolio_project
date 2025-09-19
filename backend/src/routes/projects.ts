@@ -12,6 +12,7 @@ const projectSchema = z.object({
     return words.length <= 250;
   }, { message: 'Description must be at most 250 words' }),
   technologies: z.array(z.string()).min(1),
+  functionalRequirements: z.array(z.string()).optional().default([]),
   projectType: z.string().min(1).optional(),
   githubUrl: z.string().url().optional(),
   deploymentUrl: z.string().url().optional(),
@@ -25,7 +26,7 @@ router.get('/public', async (_req, res) => {
   try {
     const { data, error } = await adminClient
       .from('projects')
-      .select('id,title,description,technologies,project_type,github_url,deployment_url,image_url,video_url,status,created_at,owner:profiles(full_name,roll_number,email,profile_image_url),comments:project_comments(id,content,created_at)')
+      .select('*,owner:profiles(full_name,roll_number,email,profile_image_url)')
       .order('created_at', { ascending: false });
     if (error) throw error;
     return res.json(
@@ -34,6 +35,7 @@ router.get('/public', async (_req, res) => {
         title: p.title,
         description: p.description,
         technologies: p.technologies ?? [],
+        functionalRequirements: p.functional_requirements ?? [],
         githubUrl: p.github_url ?? undefined,
         deploymentUrl: p.deployment_url ?? undefined,
         imageUrl: p.image_url ?? undefined,
@@ -41,8 +43,8 @@ router.get('/public', async (_req, res) => {
         status: p.status,
         createdAt: p.created_at,
         projectType: p.project_type ?? undefined,
-        owner: p.owner,
-        comments: p.comments ?? [],
+        owner: (p as any).owner,
+        comments: (p as any).comments ?? [],
       }))
     );
   } catch (err: any) {
@@ -91,6 +93,7 @@ router.post('/', requireAuth, async (req: any, res) => {
       title: payload.title,
       description: payload.description,
       technologies: payload.technologies,
+    functional_requirements: payload.functionalRequirements ?? [],
       project_type: payload.projectType,
       github_url: payload.githubUrl,
       deployment_url: payload.deploymentUrl,
@@ -118,6 +121,7 @@ router.put('/:id', requireAuth, async (req: any, res) => {
     if (parsed.data.title !== undefined) payload.title = parsed.data.title;
     if (parsed.data.description !== undefined) payload.description = parsed.data.description;
     if (parsed.data.technologies !== undefined) payload.technologies = parsed.data.technologies;
+  if (parsed.data.functionalRequirements !== undefined) payload.functional_requirements = parsed.data.functionalRequirements;
     if (parsed.data.status !== undefined) payload.status = parsed.data.status;
     if (parsed.data.projectType !== undefined) payload.project_type = parsed.data.projectType || null;
     if (parsed.data.githubUrl !== undefined) payload.github_url = parsed.data.githubUrl || null;

@@ -25,7 +25,7 @@ router.get('/me', requireAuth, async (req: any, res) => {
     const userId = user.user.id;
     const { data, error } = await adminClient
       .from('profiles')
-      .select('id, full_name, roll_number, email, phone, profile_image_url, avatar_path, created_at')
+      .select('*')
       .eq('id', userId)
       .maybeSingle();
     if (error) throw error;

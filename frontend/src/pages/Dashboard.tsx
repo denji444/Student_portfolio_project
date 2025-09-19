@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabaseClient';
 
-const emptyForm = { title:'', description:'', technologies:'', projectType:'', githubUrl:'', deploymentUrl:'', imageUrl:'', status:'planned' as const };
+const emptyForm = { title:'', description:'', technologies:'', functionalRequirements: [] as string[], functionalRequirementDraft: '', projectType:'', githubUrl:'', deploymentUrl:'', imageUrl:'', status:'planned' as const };
 const THUMBNAILS_BUCKET = (import.meta.env.VITE_SUPABASE_THUMBNAILS_BUCKET as string) || 'thumbnails';
 
 const Dashboard = () => {
@@ -36,6 +36,7 @@ const Dashboard = () => {
       title: form.title,
       description: form.description,
       technologies: form.technologies.split(',').map(s=>s.trim()).filter(Boolean),
+      functionalRequirements: form.functionalRequirements.filter((s)=>s.trim().length>0),
       projectType: form.projectType || undefined,
       githubUrl: form.githubUrl || undefined,
       deploymentUrl: form.deploymentUrl || undefined,
@@ -51,6 +52,7 @@ const Dashboard = () => {
       title: form.title,
       description: form.description,
       technologies: form.technologies.split(',').map(s=>s.trim()).filter(Boolean),
+      functionalRequirements: form.functionalRequirements.filter((s)=>s.trim().length>0),
       projectType: form.projectType || undefined,
       githubUrl: form.githubUrl || undefined,
       deploymentUrl: form.deploymentUrl || undefined,
@@ -73,6 +75,8 @@ const Dashboard = () => {
       title: p.title,
       description: p.description,
       technologies: (p.technologies ?? []).join(', '),
+      functionalRequirements: Array.isArray(p.functional_requirements) ? p.functional_requirements : (p.functionalRequirements || []),
+      functionalRequirementDraft: '',
       githubUrl: p.github_url ?? p.githubUrl ?? '',
       deploymentUrl: p.deployment_url ?? p.deploymentUrl ?? '',
       projectType: p.project_type ?? p.projectType ?? '',
@@ -154,6 +158,45 @@ const Dashboard = () => {
             <div>
               <label className="text-sm font-medium">Technologies (comma separated)</label>
               <Input placeholder="React, Java, Python, etc." value={form.technologies} onChange={e=>setForm({...form, technologies:e.target.value})} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Functional Requirements</label>
+              <div className="space-y-2 mt-2">
+                <div className="flex gap-2">
+                  <Input placeholder="Add a functional requirement" value={form.functionalRequirementDraft} onChange={(e)=>setForm({...form, functionalRequirementDraft:e.target.value})} onKeyDown={(e)=>{
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const v = form.functionalRequirementDraft.trim();
+                      if (!v) return;
+                      setForm({...form, functionalRequirements: [...form.functionalRequirements, v], functionalRequirementDraft: ''});
+                    }
+                  }} />
+                  <Button type="button" onClick={()=>{
+                    const v = form.functionalRequirementDraft.trim();
+                    if (!v) return;
+                    setForm({...form, functionalRequirements: [...form.functionalRequirements, v], functionalRequirementDraft: ''});
+                  }}>Add</Button>
+                </div>
+                {form.functionalRequirements.length > 0 && (
+                  <div className="space-y-2">
+                    {form.functionalRequirements.map((fr, idx) => (
+                      <div key={`${fr}-${idx}`} className="flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          <Input value={fr} onChange={(e)=>{
+                            const copy = [...form.functionalRequirements];
+                            copy[idx] = e.target.value;
+                            setForm({...form, functionalRequirements: copy});
+                          }} />
+                        </div>
+                        <Button variant="destructive" type="button" onClick={()=>{
+                          setForm({...form, functionalRequirements: form.functionalRequirements.filter((_, i)=>i!==idx)});
+                        }}>Remove</Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">Press Enter or click Add to append. You can edit or remove items.</div>
             </div>
             <div>
               <label className="text-sm font-medium">Project Type</label>

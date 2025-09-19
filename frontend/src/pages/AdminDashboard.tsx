@@ -275,6 +275,16 @@ const AdminDashboard = () => {
                   <div className="font-medium mb-1">Description</div>
                   <p className="leading-relaxed whitespace-pre-wrap">{detailProject.description}</p>
                 </div>
+                {Array.isArray(detailProject.functionalRequirements || detailProject.functional_requirements) && (detailProject.functionalRequirements || detailProject.functional_requirements).length > 0 && (
+                  <div>
+                    <div className="font-medium mb-1">Functional Requirements</div>
+                    <ul className="list-disc pl-5 space-y-1">
+                      {(detailProject.functionalRequirements || detailProject.functional_requirements).map((fr: string, idx: number) => (
+                        <li key={`${idx}-${fr}`}>{fr}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <div>
                   <div className="font-medium mb-1">Technologies</div>
                   <div className="flex flex-wrap gap-1">

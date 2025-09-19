@@ -121,6 +121,16 @@ const PublicProjectsSection = () => {
                 <div className="font-medium mb-1">Description</div>
                 <p className="leading-relaxed whitespace-pre-wrap">{active.description}</p>
               </div>
+              {Array.isArray(active.functionalRequirements) && active.functionalRequirements.length > 0 && (
+                <div>
+                  <div className="font-medium mb-1">Functional Requirements</div>
+                  <ul className="list-disc pl-5 space-y-1">
+                    {active.functionalRequirements.map((fr: string, idx: number) => (
+                      <li key={`${idx}-${fr}`}>{fr}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div>
                 <div className="flex items-center gap-2 mb-1"><Code className="h-4 w-4 text-muted-foreground" /><span className="font-medium">Technologies</span></div>
                 <div className="flex flex-wrap gap-1">
