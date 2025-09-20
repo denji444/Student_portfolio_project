@@ -157,23 +157,6 @@ router.get('/projects/:id/comments', requireAdmin, async (req, res) => {
   }
 });
 
-// Admin email test endpoint to verify provider config
-router.post('/email-test', requireAdmin, async (req, res) => {
-  const body = z.object({ to: z.string().email() }).safeParse(req.body);
-  if (!body.success) return res.status(400).json({ error: 'Invalid input' });
-  try {
-    const to = body.data.to;
-    const subject = 'Student Portfolio - Test Email';
-    const text = 'This is a test email from the Student Portfolio backend.';
-    const html = '<p>This is a <strong>test</strong> email from the Student Portfolio backend.</p>';
-    await sendEmail(to, subject, text, html, process.env.REPLY_TO_EMAIL);
-    return res.json({ message: 'Sent' });
-  } catch (e: any) {
-    // eslint-disable-next-line no-console
-    console.error('Email test failed:', e?.message || e);
-    return res.status(500).json({ error: e?.message || 'Failed to send test email' });
-  }
-});
 
 router.post('/projects/:id/comments', requireAdmin, async (req, res) => {
   const projectId = req.params.id;

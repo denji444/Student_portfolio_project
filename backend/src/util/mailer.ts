@@ -1,5 +1,4 @@
 import nodemailer from 'nodemailer';
-import { Resend } from 'resend';
 
 const SMTP_HOST = process.env.SMTP_HOST || '';
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
@@ -7,12 +6,9 @@ const SMTP_USER = process.env.SMTP_USER || '';
 const SMTP_PASS = process.env.SMTP_PASS || '';
 const MAIL_FROM = process.env.MAIL_FROM || SMTP_USER || 'no-reply@example.com';
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
-const RESEND_FROM = process.env.RESEND_FROM || MAIL_FROM;
 const DEFAULT_REPLY_TO = process.env.REPLY_TO_EMAIL || '';
 
 let smtpTransporter: nodemailer.Transporter | null = null;
-let resendClient: Resend | null = null;
 
 try {
   if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
@@ -27,16 +23,7 @@ try {
   smtpTransporter = null;
 }
 
-if (RESEND_API_KEY) {
-  resendClient = new Resend(RESEND_API_KEY);
-}
-
 export async function sendEmail(to: string, subject: string, text: string, html?: string, replyTo?: string) {
-  // Prefer Resend if configured (allows no-reply@yourdomain.com once domain is verified)
-  if (resendClient) {
-    await resendClient.emails.send({ from: RESEND_FROM, to, subject, text, html, reply_to: replyTo || DEFAULT_REPLY_TO || undefined });
-    return;
-  }
   if (smtpTransporter) {
     await smtpTransporter.sendMail({ from: MAIL_FROM, to, subject, text, html, replyTo: replyTo || DEFAULT_REPLY_TO || undefined });
     return;
