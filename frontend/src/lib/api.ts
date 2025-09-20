@@ -18,7 +18,7 @@ type PublicProjectApi = {
   status: 'completed' | 'in-progress' | 'planned';
   createdAt: string;
   owner?: { full_name?: string; roll_number?: string; email?: string; profile_image_url?: string | null } | null;
-  comments: string[];
+  comments: { id: string; content: string; created_at: string }[];
 };
 
 export async function fetchPublicProjects(): Promise<Project[]> {

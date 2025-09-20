@@ -47,7 +47,7 @@ const Auth = () => {
   const signupMutation = useMutation({
     mutationFn: signup,
     onSuccess: () => {
-      toast({ title: 'Account created', description: 'You can now sign in.' });
+      toast({ title: 'Account created', description: 'Please verify your email, then sign in.' });
       setMode('signin');
     },
     onError: (e: any) => toast({ title: 'Signup failed', description: e.message, variant: 'destructive' }),

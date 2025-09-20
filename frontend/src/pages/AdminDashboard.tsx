@@ -47,13 +47,19 @@ const AdminDashboard = () => {
         window.location.href = '/admin/login';
         return;
       }
-      const res = await fetch(`${API_BASE_URL}/api/admin/me`, { headers: adminHeaders() });
-      if (!res.ok) {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/admin/me`, { headers: adminHeaders() });
+        if (!res.ok) {
+          localStorage.removeItem('adminAccessToken');
+          window.location.href = '/admin/login';
+          return;
+        }
+        loadStudents();
+      } catch (e: any) {
+        toast({ title: 'Backend not reachable', description: 'Please start the API server and try again.', variant: 'destructive' });
         localStorage.removeItem('adminAccessToken');
         window.location.href = '/admin/login';
-        return;
       }
-      loadStudents();
     };
     void verify();
   }, []);
@@ -141,6 +147,19 @@ const AdminDashboard = () => {
       setNewComment('');
       setComments((c) => [...c, json]);
       toast({ title: 'Comment added' });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    }
+  };
+
+  const deleteComment = async (commentId: string) => {
+    if (!selectedProjectId) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/projects/${selectedProjectId}/comments/${commentId}`, { method: 'DELETE', headers: adminHeaders() });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || 'Failed to delete comment');
+      setComments((c)=>c.filter(x=>x.id !== commentId));
+      toast({ title: 'Comment deleted' });
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
@@ -317,7 +336,7 @@ const AdminDashboard = () => {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center gap-2">
-              <Input placeholder="Project ID or Student ID" value={selectedProjectId} onChange={(e)=>setSelectedProjectId(e.target.value)} />
+              <Input placeholder="Project ID" value={selectedProjectId} onChange={(e)=>setSelectedProjectId(e.target.value)} />
               <Button variant="secondary" onClick={()=>loadComments(selectedProjectId)}>Load Comments</Button>
               <Button variant="destructive" onClick={()=>deleteProject(selectedProjectId)}>Delete Project</Button>
             </div>
@@ -328,9 +347,12 @@ const AdminDashboard = () => {
               </div>
               <div className="space-y-2">
                 {comments.map((c)=> (
-                  <div key={c.id} className="border rounded p-2">
-                    <div className="text-xs text-muted-foreground">{new Date(c.created_at).toLocaleString()}</div>
-                    <div>{c.content}</div>
+                  <div key={c.id} className="flex items-start justify-between gap-2 border rounded p-2">
+                    <div>
+                      <div className="text-xs text-muted-foreground">{new Date(c.created_at).toLocaleString()}</div>
+                      <div>{c.content}</div>
+                    </div>
+                    <Button size="sm" variant="destructive" onClick={()=>deleteComment(c.id)}>Delete</Button>
                   </div>
                 ))}
               </div>
@@ -345,6 +367,7 @@ const AdminDashboard = () => {
                       </div>
                       <div className="flex gap-2">
                         <Button variant="secondary" onClick={()=>openDetails(p.id)}>View Details</Button>
+                        <Button variant="secondary" onClick={()=>loadComments(p.id)}>Select</Button>
                         <Button variant="destructive" onClick={()=>deleteProject(p.id)}>Delete</Button>
                       </div>
                     </div>

@@ -45,15 +45,14 @@ router.post('/signup', async (req, res) => {
     if (emailErr) throw emailErr;
     if (existingByEmail) return res.status(409).json({ error: 'Email already registered' });
 
-    // Create user in Supabase Auth
-    const { data: signUpData, error: signUpError } = await adminClient.auth.admin.createUser({
+    // Create user via public client to trigger email verification
+    const redirectTo = process.env.EMAIL_REDIRECT_URL || undefined;
+    const { data: signUpData, error: signUpError } = await publicClient.auth.signUp({
       email,
       password,
-      email_confirm: true,
-      user_metadata: { fullName, rollNumber, phone },
+      options: { emailRedirectTo: redirectTo, data: { fullName, rollNumber, phone } },
     });
     if (signUpError || !signUpData.user) throw signUpError ?? new Error('Sign up failed');
-
     const authUser = signUpData.user;
 
     // Create profile row
@@ -66,7 +65,7 @@ router.post('/signup', async (req, res) => {
     });
     if (profileErr) throw profileErr;
 
-    return res.status(201).json({ message: 'Account created' });
+    return res.status(201).json({ message: 'Account created. Please verify your email to sign in.' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message ?? 'Internal error' });
   }
@@ -81,6 +80,13 @@ router.post('/signin', async (req, res) => {
   try {
     const { data, error } = await publicClient.auth.signInWithPassword({ email, password });
     if (error || !data.session) return res.status(401).json({ error: 'Invalid credentials' });
+    // Block access until email is verified
+    const confirmed = data.user?.email_confirmed_at;
+    if (!confirmed) {
+      // logout the just-created session to be safe
+      await publicClient.auth.signOut();
+      return res.status(403).json({ error: 'Email not verified. Please check your inbox.' });
+    }
     const { access_token, refresh_token, user } = data.session;
     return res.status(200).json({ accessToken: access_token, refreshToken: refresh_token, user });
   } catch (err: any) {

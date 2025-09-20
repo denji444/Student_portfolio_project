@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
 import { adminClient } from '../config/supabase.js';
+import { sendEmail, renderCommentHtml } from '../util/mailer.js';
 
 const router = Router();
 
@@ -167,6 +168,21 @@ router.post('/projects/:id/comments', requireAdmin, async (req, res) => {
       .select('*')
       .single();
     if (error) throw error;
+    // Fetch project owner email
+    const { data: project, error: projErr } = await adminClient
+      .from('projects')
+      .select('id, user_id, title, owner:profiles(email, full_name)')
+      .eq('id', projectId)
+      .maybeSingle();
+    if (!projErr && project && (project as any).owner?.email) {
+      const owner = (project as any).owner;
+      const to = owner.email as string;
+      const name = (owner.full_name as string) || 'Student';
+      const subject = `New comment on your project: ${(project as any).title || 'Project'}`;
+      const text = `Hello ${name},\n\nAn admin added a comment on your project:\n\n"${parsed.data.content}"\n\nProject ID: ${projectId}\n\nRegards,\nStudent Portfolio`;
+      const html = renderCommentHtml({ studentName: name, projectTitle: (project as any).title || 'Project', comment: parsed.data.content, projectId, appUrl: process.env.APP_BASE_URL });
+      try { await sendEmail(to, subject, text, html, process.env.REPLY_TO_EMAIL); } catch {}
+    }
     return res.status(201).json(data);
   } catch (err: any) {
     return res.status(500).json({ error: err.message ?? 'Internal error' });

@@ -26,7 +26,7 @@ router.get('/public', async (_req, res) => {
   try {
     const { data, error } = await adminClient
       .from('projects')
-      .select('*,owner:profiles(full_name,roll_number,email,profile_image_url)')
+      .select('*,owner:profiles(full_name,roll_number,email,profile_image_url),comments:project_comments(id,content,created_at)')
       .order('created_at', { ascending: false });
     if (error) throw error;
     return res.json(

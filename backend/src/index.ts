@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import './util/mailer.js';
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
 import projectRoutes from './routes/projects.js';
