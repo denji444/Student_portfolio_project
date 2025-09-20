@@ -198,7 +198,7 @@ router.post('/projects/:id/comments', requireAdmin, async (req, res) => {
       const name = (owner.full_name as string) || 'Student';
       const subject = `New comment on your project: ${(project as any).title || 'Project'}`;
       const text = `Hello ${name},\n\nAn admin added a comment on your project:\n\n"${parsed.data.content}"\n\nProject ID: ${projectId}\n\nRegards,\nStudent Portfolio`;
-      const html = renderCommentHtml({ studentName: name, projectTitle: (project as any).title || 'Project', comment: parsed.data.content, projectId, appUrl: process.env.APP_BASE_URL });
+      const html = renderCommentHtml({ studentName: name, projectTitle: (project as any).title || 'Project', comment: parsed.data.content, projectId, appUrl: process.env.APP_BASE_URL || 'https://student-portfolio-gppt.onrender.com/' });
       try { await sendEmail(to, subject, text, html, process.env.REPLY_TO_EMAIL); } catch (e) {
         // eslint-disable-next-line no-console
         console.error('Comment email failed to send:', (e as any)?.message || e);

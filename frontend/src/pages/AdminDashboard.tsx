@@ -18,7 +18,6 @@ const AdminDashboard = () => {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [studentProjects, setStudentProjects] = useState<StudentProject[]>([]);
-  const [testEmail, setTestEmail] = useState('');
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailProject, setDetailProject] = useState<any | null>(null);
   const moderationRef = useRef<HTMLDivElement | null>(null);
@@ -161,18 +160,6 @@ const AdminDashboard = () => {
       if (!res.ok) throw new Error(json?.error || 'Failed to delete comment');
       setComments((c)=>c.filter(x=>x.id !== commentId));
       toast({ title: 'Comment deleted' });
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
-    }
-  };
-
-  const sendTestEmail = async () => {
-    if (!testEmail.trim()) return;
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/admin/email-test`, { method: 'POST', headers: adminHeaders(), body: JSON.stringify({ to: testEmail.trim() }) });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || 'Failed to send test email');
-      toast({ title: 'Test email sent', description: `Sent to ${testEmail.trim()}` });
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
@@ -348,10 +335,6 @@ const AdminDashboard = () => {
             <h2 className="text-xl font-semibold">Project Moderation</h2>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Input placeholder="Test email address" value={testEmail} onChange={(e)=>setTestEmail(e.target.value)} />
-              <Button variant="secondary" onClick={sendTestEmail}>Send Test Email</Button>
-            </div>
             <div className="flex items-center gap-2">
               <Input placeholder="Project ID" value={selectedProjectId} onChange={(e)=>setSelectedProjectId(e.target.value)} />
               <Button variant="secondary" onClick={()=>loadComments(selectedProjectId)}>Load Comments</Button>
