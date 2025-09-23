@@ -96,7 +96,7 @@ router.post('/signin', authLimiter, async (req, res) => {
     res.cookie('accessToken', access_token, {
       httpOnly: true,
       secure: isProd,
-      sameSite: 'lax',
+      sameSite: 'none',
       maxAge: 1000 * 60 * 60, // 1h
       path: '/',
     });
@@ -104,7 +104,7 @@ router.post('/signin', authLimiter, async (req, res) => {
       res.cookie('refreshToken', refresh_token, {
         httpOnly: true,
         secure: isProd,
-        sameSite: 'lax',
+        sameSite: 'none',
         maxAge: 1000 * 60 * 60 * 24 * 7, // 7d
         path: '/',
       });
@@ -129,7 +129,7 @@ router.post('/refresh', authLimiter, async (req, res) => {
     res.cookie('accessToken', access_token, {
       httpOnly: true,
       secure: isProd,
-      sameSite: 'lax',
+      sameSite: 'none',
       maxAge: 1000 * 60 * 60,
       path: '/',
     });
@@ -137,7 +137,7 @@ router.post('/refresh', authLimiter, async (req, res) => {
       res.cookie('refreshToken', refresh_token, {
         httpOnly: true,
         secure: isProd,
-        sameSite: 'lax',
+        sameSite: 'none',
         maxAge: 1000 * 60 * 60 * 24 * 7,
         path: '/',
       });
@@ -151,8 +151,8 @@ router.post('/refresh', authLimiter, async (req, res) => {
 // Logout clears cookies
 router.post('/logout', authLimiter, async (_req, res) => {
   const isProd = process.env.NODE_ENV === 'production';
-  res.clearCookie('accessToken', { httpOnly: true, secure: isProd, sameSite: 'lax', path: '/' });
-  res.clearCookie('refreshToken', { httpOnly: true, secure: isProd, sameSite: 'lax', path: '/' });
+  res.clearCookie('accessToken', { httpOnly: true, secure: isProd, sameSite: 'none', path: '/' });
+  res.clearCookie('refreshToken', { httpOnly: true, secure: isProd, sameSite: 'none', path: '/' });
   return res.json({ message: 'Logged out' });
 });
 

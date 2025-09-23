@@ -11,8 +11,12 @@
     "start": "npm --prefix backend run start"
   },
   "devDependencies": {
+    "@types/cookie-parser": "^1.4.9",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/hpp": "^0.2.6",
+    "@types/multer": "^2.0.0",
+    "@types/nodemailer": "^7.0.1",
     "concurrently": "^9.1.2"
   }
 }
-
-

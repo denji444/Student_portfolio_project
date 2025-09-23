@@ -9,26 +9,33 @@ export default function NeoNav({ showBrand = true }: Props) {
   const navigate = useNavigate();
   const [isAuthed, setIsAuthed] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
+  const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || '';
 
   useEffect(() => {
-    // Check if we have cookies by trying to fetch a protected endpoint
-    fetch('/api/profile/me', { credentials: 'include' })
-      .then(res => {
-        setIsAuthed(res.ok);
+    // Check auth by calling backend profile endpoint. Avoid relative path (which on static host can 200 with HTML).
+    const url = `${apiBase}/api/profile/me`;
+    fetch(url, { credentials: 'include' })
+      .then(async (res) => {
+        const ct = res.headers.get('content-type') || '';
+        // Require JSON and 200 to consider authenticated
+        if (res.ok && ct.includes('application/json')) {
+          setIsAuthed(true);
+        } else {
+          setIsAuthed(false);
+        }
         setIsChecking(false);
       })
       .catch(() => {
         setIsAuthed(false);
         setIsChecking(false);
       });
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiBase]);
 
   const logout = async () => {
     try {
-      await fetch('/api/auth/logout', { 
-        method: 'POST', 
-        credentials: 'include' 
-      });
+      const url = `${apiBase}/api/auth/logout`;
+      await fetch(url, { method: 'POST', credentials: 'include' });
     } catch (e) {
       // Ignore logout errors - cookies might already be cleared
     }
