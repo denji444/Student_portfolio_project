@@ -12,12 +12,19 @@ import { Eye, EyeOff } from 'lucide-react';
 const Profile = () => {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+  const [isAuthed, setIsAuthed] = useState(false);
+
+  useEffect(() => {
+    // Check if we have cookies by trying to fetch a protected endpoint
+    fetch('/api/profile/me', { credentials: 'include' })
+      .then(res => setIsAuthed(res.ok))
+      .catch(() => setIsAuthed(false));
+  }, []);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['me'],
     queryFn: getMyProfile,
-    enabled: !!token,
+    enabled: isAuthed,
   });
 
   const [fullName, setFullName] = useState('');
@@ -74,7 +81,7 @@ const Profile = () => {
     onError: (e:any) => toast({ title: 'Change password failed', description: e.message, variant: 'destructive' }),
   });
 
-  if (!token) {
+  if (!isAuthed) {
     return (
       <div className="min-h-screen bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
         <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">

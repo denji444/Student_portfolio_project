@@ -7,23 +7,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabaseClient';
 
 const emptyForm = { title:'', description:'', technologies:'', functionalRequirements: [] as string[], functionalRequirementDraft: '', projectType:'', githubUrl:'', deploymentUrl:'', imageUrl:'', status:'planned' as const };
-const THUMBNAILS_BUCKET = (import.meta.env.VITE_SUPABASE_THUMBNAILS_BUCKET as string) || 'thumbnails';
 
 const Dashboard = () => {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+  const token = 'cookie';
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [uploadingThumb, setUploadingThumb] = useState(false);
-  // Ensure Supabase auth session is initialized for Storage RLS
-  if (token) {
-    const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refreshToken') : null;
-    if (refreshToken) void supabase.auth.setSession({ access_token: token, refresh_token: refreshToken });
-  }
+  // Thumbnail uploads are proxied via backend; no direct Supabase session needed here.
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['my-projects'],
@@ -85,7 +79,7 @@ const Dashboard = () => {
     });
   };
 
-  if (!token) {
+  if (!data && !isLoading) {
     return (
       <div className="min-h-screen bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
         <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
@@ -130,14 +124,16 @@ const Dashboard = () => {
                       if (!file) return;
                       setUploadingThumb(true);
                       try {
-                        const ext = file.name.split('.').pop() || 'jpg';
-                        // Many Supabase setups require uploading to a flat or foldered path inside the bucket;
-                        // remove leading 'public/' from path. Use a 'uploads/' prefix for organization.
-                        const path = `uploads/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-                        const { error } = await supabase.storage.from(THUMBNAILS_BUCKET).upload(path, file, { upsert: true, contentType: file.type });
-                        if (error) throw error;
-                        const { data: pub } = supabase.storage.from(THUMBNAILS_BUCKET).getPublicUrl(path);
-                        setForm({ ...form, imageUrl: pub.publicUrl });
+                        const fd = new FormData();
+                        fd.append('file', file);
+                        const res = await fetch('/api/projects/upload-thumbnail', {
+                          method: 'POST',
+                          body: fd,
+                          credentials: 'include',
+                        });
+                        const json = await res.json();
+                        if (!res.ok) throw new Error(json?.error || 'Upload failed');
+                        setForm({ ...form, imageUrl: json.url });
                         toast({ title: 'Thumbnail uploaded' });
                       } catch (err:any) {
                         toast({ title: 'Upload failed', description: err.message || 'Could not upload thumbnail', variant: 'destructive' });

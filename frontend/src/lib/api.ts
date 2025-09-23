@@ -1,9 +1,10 @@
 import type { Project } from '@/types/portfolio';
 
-// Resolve API base URL for dev/prod. Fallback to same-origin relative 
-// path when no env is provided, and to localhost:4000 in local dev.
+// Resolve API base URL for dev/prod.
+// Prefer relative path by default so Vite dev proxy can handle /api and keep cookies first-party.
+// Allow override via VITE_API_BASE_URL when deploying or using a different origin.
 const envUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
-const API_BASE_URL = envUrl || (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? 'http://localhost:4000' : '');
+const API_BASE_URL = envUrl || '';
 
 type PublicProjectApi = {
   id: string;
@@ -36,7 +37,7 @@ export async function fetchPublicProjects(): Promise<Project[]> {
     githubUrl: p.githubUrl ?? p.github_url ?? undefined,
     deploymentUrl: p.deploymentUrl ?? p.deployment_url ?? undefined,
     imageUrl: p.imageUrl ?? p.image_url ?? undefined,
-    videoUrl: p.videoUrl ?? p.video_url ?? undefined,
+    videoUrl: undefined,
     status: p.status,
     createdAt: p.createdAt ?? p.created_at,
     owner: p.owner ?? null,
@@ -53,7 +54,7 @@ export async function fetchPublicProjects(): Promise<Project[]> {
     githubUrl: p.githubUrl,
     deploymentUrl: p.deploymentUrl,
     imageUrl: p.imageUrl,
-    videoUrl: p.videoUrl,
+    videoUrl: undefined,
     status: p.status,
     completionDate: new Date(p.createdAt).toLocaleDateString(),
     ownerName: p.owner?.full_name,
@@ -77,55 +78,57 @@ export async function signup(payload: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+    credentials: 'include',
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json?.error || 'Signup failed');
   return json;
 }
 
-export async function signin(payload: {
-  email: string;
-  password: string;
-}): Promise<{ accessToken: string; refreshToken?: string }>
+export async function signin(payload: { email: string; password: string }): Promise<{ message: string }>
 {
   const res = await fetch(`${API_BASE_URL}/api/auth/signin`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+    credentials: 'include',
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json?.error || 'Signin failed');
-  return { accessToken: json.accessToken, refreshToken: json.refreshToken };
+  return { message: json?.message || 'Signed in' };
 }
 
-function authHeaders() {
-  const token = localStorage.getItem('accessToken');
-  return token ? { Authorization: `Bearer ${token}` } : {};
+export async function resendVerification(payload: { email: string }): Promise<{ message: string }>
+{
+  const res = await fetch(`${API_BASE_URL}/api/auth/resend-verification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || 'Failed to resend verification email');
+  return json;
 }
 
 async function requestWithAuth(input: string, init: RequestInit = {}) {
   const res = await fetch(input, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init.headers || {}), ...authHeaders() },
+    headers: { 'Content-Type': 'application/json', ...(init.headers || {}) },
+    credentials: 'include',
   });
   if (res.status !== 401) return res;
-  // try refresh once
-  const refreshToken = localStorage.getItem('refreshToken');
-  if (!refreshToken) return res;
+  // try refresh once via cookies
   try {
     const refreshRes = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
+      credentials: 'include',
     });
     if (!refreshRes.ok) return res;
-    const tokens = await refreshRes.json();
-    if (tokens?.accessToken) localStorage.setItem('accessToken', tokens.accessToken);
-    if (tokens?.refreshToken) localStorage.setItem('refreshToken', tokens.refreshToken);
     // retry original
     return fetch(input, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...(init.headers || {}), ...authHeaders() },
+      headers: { 'Content-Type': 'application/json', ...(init.headers || {}) },
+      credentials: 'include',
     });
   } catch {
     return res;
@@ -134,6 +137,7 @@ async function requestWithAuth(input: string, init: RequestInit = {}) {
 
 export async function getMyProjects() {
   const res = await requestWithAuth(`${API_BASE_URL}/api/projects`, { method: 'GET' });
+  if (res.status === 401 || res.status === 403) throw new Error('UNAUTHORIZED');
   if (!res.ok) throw new Error('Failed to load your projects');
   return res.json();
 }

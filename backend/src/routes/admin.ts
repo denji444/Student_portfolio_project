@@ -1,10 +1,13 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
 import { adminClient } from '../config/supabase.js';
 import { sendEmail, renderCommentHtml } from '../util/mailer.js';
 
 const router = Router();
+// Auth and admin sensitive endpoints limiter
+const authLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 50 });
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';
@@ -28,7 +31,7 @@ const requireAdmin = (req: any, res: any, next: any) => {
 };
 
 // Admin login
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   const body = z.object({ email: z.string().email(), password: z.string().min(1) }).safeParse(req.body);
   if (!body.success) return res.status(400).json({ error: 'Invalid input' });
   const { email, password } = body.data;
@@ -61,6 +64,7 @@ router.get('/students', requireAdmin, async (_req, res) => {
 // Update student profile
 router.put('/students/:id', requireAdmin, async (req, res) => {
   const id = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(id)) return res.status(400).json({ error: 'Invalid id' });
   const parsed = z.object({
     fullName: z.string().min(1).optional(),
     phone: z.string().regex(/^03\d{9}$/).optional(),
@@ -90,6 +94,7 @@ router.put('/students/:id', requireAdmin, async (req, res) => {
 // Delete any project
 router.delete('/projects/:id', requireAdmin, async (req, res) => {
   const id = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(id)) return res.status(400).json({ error: 'Invalid id' });
   try {
     const { data, error } = await adminClient
       .from('projects')
@@ -108,6 +113,7 @@ router.delete('/projects/:id', requireAdmin, async (req, res) => {
 // Delete a student (profile + cascades projects)
 router.delete('/students/:id', requireAdmin, async (req, res) => {
   const id = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(id)) return res.status(400).json({ error: 'Invalid id' });
   try {
     const { data, error } = await adminClient
       .from('profiles')
@@ -126,6 +132,7 @@ router.delete('/students/:id', requireAdmin, async (req, res) => {
 // List projects for a specific student id
 router.get('/students/:id/projects', requireAdmin, async (req, res) => {
   const id = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(id)) return res.status(400).json({ error: 'Invalid id' });
   try {
     const { data, error } = await adminClient
       .from('projects')
@@ -144,6 +151,7 @@ const commentSchema = z.object({ content: z.string().min(1).max(2000) });
 
 router.get('/projects/:id/comments', requireAdmin, async (req, res) => {
   const projectId = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(projectId)) return res.status(400).json({ error: 'Invalid id' });
   try {
     const { data, error } = await adminClient
       .from('project_comments')
@@ -160,6 +168,7 @@ router.get('/projects/:id/comments', requireAdmin, async (req, res) => {
 
 router.post('/projects/:id/comments', requireAdmin, async (req, res) => {
   const projectId = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(projectId)) return res.status(400).json({ error: 'Invalid id' });
   const parsed = commentSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid input' });
   try {
@@ -195,6 +204,7 @@ router.post('/projects/:id/comments', requireAdmin, async (req, res) => {
 
 router.delete('/projects/:projectId/comments/:commentId', requireAdmin, async (req, res) => {
   const { projectId, commentId } = req.params as any;
+  if (!/^[-a-f0-9]{36}$/i.test(projectId) || !/^[-a-f0-9]{36}$/i.test(commentId)) return res.status(400).json({ error: 'Invalid id' });
   try {
     const { data, error } = await adminClient
       .from('project_comments')
@@ -214,8 +224,9 @@ router.delete('/projects/:projectId/comments/:commentId', requireAdmin, async (r
 export default router;
 
 // Password reset (admin sets a temporary new password)
-router.post('/students/:id/reset-password', requireAdmin, async (req, res) => {
+router.post('/students/:id/reset-password', requireAdmin, authLimiter, async (req, res) => {
   const id = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(id)) return res.status(400).json({ error: 'Invalid id' });
   const body = z.object({ newPassword: z.string().min(8) }).safeParse(req.body);
   if (!body.success) return res.status(400).json({ error: 'Invalid input' });
   try {

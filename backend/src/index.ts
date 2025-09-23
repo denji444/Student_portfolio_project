@@ -1,6 +1,10 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import hpp from 'hpp';
+import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 import './util/mailer.js';
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
@@ -9,8 +13,42 @@ import profileRoutes from './routes/profile.js';
 
 const app = express();
 
-app.use(cors({ origin: true, credentials: false, allowedHeaders: ['Content-Type', 'Authorization'] }));
-app.use(express.json());
+// Security headers
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      defaultSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'none'"],
+      formAction: ["'none'"],
+    },
+  },
+}));
+
+// Prevent HTTP parameter pollution
+app.use(hpp());
+
+// Strict CORS with optional whitelist
+const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').map(s=>s.trim()).filter(Boolean);
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(new Error('CORS not allowed'));
+  },
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
+// JSON body parsing with size limits
+app.use(express.json({ limit: '200kb' }));
+app.use(cookieParser());
+
+// Global basic rate limit
+const globalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 800 });
+app.use(globalLimiter);
 
 app.get('/', (_req, res) => {
   res.status(200).json({ message: 'Student Portfolio API' });

@@ -11,9 +11,9 @@ const updateSchema = z.object({
 });
 
 const requireAuth = (req: any, res: any, next: any) => {
-  const auth = req.headers.authorization;
-  if (!auth) return res.status(401).json({ error: 'Missing Authorization header' });
-  req.accessToken = auth.replace('Bearer ', '');
+  const token = req.cookies?.accessToken;
+  if (!token) return res.status(401).json({ error: 'Missing access token' });
+  req.accessToken = token;
   next();
 };
 

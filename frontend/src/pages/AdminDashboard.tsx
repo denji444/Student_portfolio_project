@@ -1,8 +1,9 @@
 import NeoNav from '@/components/design3/NeoNav';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import AnimatedList from '@/components/AnimatedList';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
@@ -20,7 +21,9 @@ const AdminDashboard = () => {
   const [studentProjects, setStudentProjects] = useState<StudentProject[]>([]);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailProject, setDetailProject] = useState<any | null>(null);
-  const moderationRef = useRef<HTMLDivElement | null>(null);
+  const [moderationOpen, setModerationOpen] = useState(false);
+  const [moderationStudent, setModerationStudent] = useState<Student | null>(null);
+  
   const { toast } = useToast();
 
   const adminHeaders = () => {
@@ -178,10 +181,8 @@ const AdminDashboard = () => {
         setComments([]);
         setSelectedProjectId('');
       }
-      // Smoothly scroll to the Project Moderation section
-      if (moderationRef.current) {
-        moderationRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+      // Open moderation dialog instead of auto-scroll
+      setModerationOpen(true);
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
@@ -221,34 +222,39 @@ const AdminDashboard = () => {
             {filtered.length === 0 ? (
               <p className="text-muted-foreground">No students found.</p>
             ) : (
-              filtered.map((s) => (
-                <div key={s.id} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-center border rounded p-3">
-                  <div className="flex items-center gap-3 md:col-span-2 min-w-0">
-                    {s.profile_image_url ? (
-                      <img src={s.profile_image_url} className="h-10 w-10 rounded-full object-cover" />
-                    ) : (
-                      <div className="h-10 w-10 rounded-full bg-muted" />
-                    )}
-                    <div>
-                      <div className="font-medium">{s.full_name}</div>
-                      <div className="text-xs text-muted-foreground">{s.email} • {s.roll_number}</div>
+              <AnimatedList
+                items={filtered.map((s)=> (
+                  <div key={s.id} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-center border rounded p-3">
+                    <div className="flex items-center gap-3 md:col-span-2 min-w-0">
+                      {s.profile_image_url ? (
+                        <img src={s.profile_image_url} className="h-10 w-10 rounded-full object-cover" />
+                      ) : (
+                        <div className="h-10 w-10 rounded-full bg-muted" />
+                      )}
+                      <div>
+                        <div className="font-medium">{s.full_name}</div>
+                        <div className="text-xs text-muted-foreground">{s.email} • {s.roll_number}</div>
+                      </div>
+                    </div>
+                    <div className="md:col-span-1 min-w-0">
+                      <Input className="w-full" value={s.full_name} onChange={(e)=>setStudents(prev => prev.map(p=>p.id===s.id?{...p, full_name:e.target.value}:p))} />
+                    </div>
+                    <div className="md:col-span-1 min-w-0">
+                      <Input className="w-full" value={s.phone ?? ''} onChange={(e)=>setStudents(prev => prev.map(p=>p.id===s.id?{...p, phone:e.target.value}:p))} />
+                    </div>
+                    <div className="md:col-span-1 flex flex-wrap gap-2 justify-end md:justify-start">
+                      <Button size="sm" className="bg-success text-success-foreground hover:bg-success" onClick={()=>updateStudent(s)}>Save</Button>
+                      <Button size="sm" variant="destructive" onClick={()=>deleteStudent(s.id)}>Delete</Button>
+                      <Button size="sm" variant="secondary" onClick={()=>{ setModerationStudent(s); void loadStudentProjects(s.id); }}>View Projects</Button>
+                      <Button size="sm" variant="outline" onClick={()=>resetPassword(s.id)}>Reset Password</Button>
                     </div>
                   </div>
-                  <div className="md:col-span-1 min-w-0">
-                    <Input className="w-full" value={s.full_name} onChange={(e)=>setStudents(prev => prev.map(p=>p.id===s.id?{...p, full_name:e.target.value}:p))} />
-                  </div>
-                  <div className="md:col-span-1 min-w-0">
-                    <Input className="w-full" value={s.phone ?? ''} onChange={(e)=>setStudents(prev => prev.map(p=>p.id===s.id?{...p, phone:e.target.value}:p))} />
-                  </div>
-                  {/* Removed Profile Image URL input for admin view */}
-                  <div className="md:col-span-1 flex flex-wrap gap-2 justify-end md:justify-start">
-                    <Button size="sm" className="bg-success text-success-foreground hover:bg-success" onClick={()=>updateStudent(s)}>Save</Button>
-                    <Button size="sm" variant="destructive" onClick={()=>deleteStudent(s.id)}>Delete</Button>
-                    <Button size="sm" variant="secondary" onClick={()=>loadStudentProjects(s.id)}>View Projects</Button>
-                    <Button size="sm" variant="outline" onClick={()=>resetPassword(s.id)}>Reset Password</Button>
-                  </div>
-                </div>
-              ))
+                ))}
+                onItemSelect={(_, idx)=>{/* noop, handled by buttons */}}
+                showGradients={true}
+                enableArrowNavigation={true}
+                displayScrollbar={true}
+              />
             )}
           </CardContent>
         </Card>
@@ -265,15 +271,19 @@ const AdminDashboard = () => {
                 {detailProject.projectType || detailProject.project_type ? (
                   <div className="text-muted-foreground">Project Type: {detailProject.projectType || detailProject.project_type}</div>
                 ) : null}
-                {detailProject.videoUrl || detailProject.imageUrl ? (
-                  <div className="aspect-video rounded bg-muted overflow-hidden">
-                    {detailProject.videoUrl ? (
-                      <iframe src={detailProject.videoUrl} className="w-full h-full" allowFullScreen title={`${detailProject.title} demo`} />
-                    ) : (
-                      <img src={detailProject.imageUrl} alt={detailProject.title} className="w-full h-full object-cover" />
-                    )}
+                {/* Media preview: show thumbnail if available */}
+                {detailProject.imageUrl && (
+                  <div>
+                    <div className="font-medium mb-1">Thumbnail</div>
+                    <div className="w-full rounded-lg overflow-hidden border bg-muted">
+                      <img
+                        src={detailProject.imageUrl}
+                        alt={detailProject.title}
+                        className="w-full h-64 object-cover"
+                      />
+                    </div>
                   </div>
-                ) : null}
+                )}
                 {(detailProject.owner?.full_name || detailProject.owner?.roll_number || detailProject.owner?.email || detailProject.owner?.profile_image_url) && (
                   <div className="flex items-center gap-3 p-3 rounded-md bg-muted/40">
                     {detailProject.owner?.profile_image_url ? (
@@ -330,53 +340,58 @@ const AdminDashboard = () => {
           </DialogContent>
         </Dialog>
 
-        <Card ref={moderationRef}>
-          <CardHeader>
-            <h2 className="text-xl font-semibold">Project Moderation</h2>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Input placeholder="Project ID" value={selectedProjectId} onChange={(e)=>setSelectedProjectId(e.target.value)} />
-              <Button variant="secondary" onClick={()=>loadComments(selectedProjectId)}>Load Comments</Button>
-              <Button variant="destructive" onClick={()=>deleteProject(selectedProjectId)}>Delete Project</Button>
-            </div>
-            <div className="space-y-2">
-              <div className="flex gap-2">
-                <Input placeholder="Write a comment" value={newComment} onChange={(e)=>setNewComment(e.target.value)} />
-                <Button className="bg-success text-success-foreground hover:bg-success" onClick={addComment}>Add</Button>
+        {/* Moderation dialog */}
+        <Dialog open={moderationOpen} onOpenChange={setModerationOpen}>
+          <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Project Moderation {moderationStudent ? `— ${moderationStudent.full_name} (${moderationStudent.roll_number})` : ''}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Input placeholder="Project ID" value={selectedProjectId} onChange={(e)=>setSelectedProjectId(e.target.value)} />
+                <Button variant="secondary" onClick={()=>loadComments(selectedProjectId)}>Load Comments</Button>
+                <Button variant="destructive" onClick={()=>deleteProject(selectedProjectId)}>Delete Project</Button>
               </div>
               <div className="space-y-2">
-                {comments.map((c)=> (
-                  <div key={c.id} className="flex items-start justify-between gap-2 border rounded p-2">
-                    <div>
-                      <div className="text-xs text-muted-foreground">{new Date(c.created_at).toLocaleString()}</div>
-                      <div>{c.content}</div>
-                    </div>
-                    <Button size="sm" variant="destructive" onClick={()=>deleteComment(c.id)}>Delete</Button>
-                  </div>
-                ))}
-              </div>
-              {studentProjects.length > 0 && (
+                <div className="flex gap-2">
+                  <Input placeholder="Write a comment" value={newComment} onChange={(e)=>setNewComment(e.target.value)} />
+                  <Button className="bg-success text-success-foreground hover:bg-success" onClick={addComment}>Add</Button>
+                </div>
                 <div className="space-y-2">
-                  <h3 className="text-lg font-semibold">Student Projects</h3>
-                  {studentProjects.map(p => (
-                    <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border rounded p-2">
-                      <div className="min-w-0">
-                        <div className="font-medium truncate max-w-[360px]">{p.title}</div>
-                        <div className="text-xs text-muted-foreground">{p.status} • {new Date(p.created_at).toLocaleDateString()} {p.project_type ? `• ${p.project_type}` : ''}</div>
+                  {comments.map((c)=> (
+                    <div key={c.id} className="flex items-start justify-between gap-2 border rounded p-2">
+                      <div>
+                        <div className="text-xs text-muted-foreground">{new Date(c.created_at).toLocaleString()}</div>
+                        <div>{c.content}</div>
                       </div>
-                      <div className="flex gap-2">
-                        <Button variant="secondary" onClick={()=>openDetails(p.id)}>View Details</Button>
-                        <Button variant="secondary" onClick={()=>loadComments(p.id)}>Select</Button>
-                        <Button variant="destructive" onClick={()=>deleteProject(p.id)}>Delete</Button>
-                      </div>
+                      <Button size="sm" variant="destructive" onClick={()=>deleteComment(c.id)}>Delete</Button>
                     </div>
                   ))}
                 </div>
-              )}
+                {studentProjects.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-semibold">Student Projects</h3>
+                    {studentProjects.map(p => (
+                      <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border rounded p-2">
+                        <div className="min-w-0">
+                          <div className="font-medium truncate max-w-[360px]">{p.title}</div>
+                          <div className="text-xs text-muted-foreground">{p.status} • {new Date(p.created_at).toLocaleDateString()} {p.project_type ? `• ${p.project_type}` : ''}</div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="secondary" onClick={()=>openDetails(p.id)}>View Details</Button>
+                          <Button variant="secondary" onClick={()=>loadComments(p.id)}>Select</Button>
+                          <Button variant="destructive" onClick={()=>deleteProject(p.id)}>Delete</Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </DialogContent>
+        </Dialog>
+
+        
       </main>
     </div>
   );

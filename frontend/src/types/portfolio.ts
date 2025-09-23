@@ -6,7 +6,6 @@ export interface Project {
   functionalRequirements?: string[];
   projectType?: string;
   imageUrl?: string;
-  videoUrl?: string;
   deploymentUrl?: string;
   githubUrl?: string;
   completionDate: string;

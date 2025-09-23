@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { adminClient, getUserClient, publicClient } from '../config/supabase.js';
+import multer from 'multer';
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB limit
+const THUMBNAILS_BUCKET = process.env.SUPABASE_THUMBNAILS_BUCKET || 'thumbnails';
 
 const projectSchema = z.object({
   title: z.string().min(1),
@@ -17,7 +20,6 @@ const projectSchema = z.object({
   githubUrl: z.string().url().optional(),
   deploymentUrl: z.string().url().optional(),
   imageUrl: z.string().url().optional(),
-  videoUrl: z.string().url().optional(),
   status: z.enum(['completed', 'in-progress', 'planned']).default('planned'),
 });
 
@@ -39,7 +41,6 @@ router.get('/public', async (_req, res) => {
         githubUrl: p.github_url ?? undefined,
         deploymentUrl: p.deployment_url ?? undefined,
         imageUrl: p.image_url ?? undefined,
-        videoUrl: p.video_url ?? undefined,
         status: p.status,
         createdAt: p.created_at,
         projectType: p.project_type ?? undefined,
@@ -52,11 +53,10 @@ router.get('/public', async (_req, res) => {
   }
 });
 
-// Auth required middleware
+// Auth required middleware - reads from cookies
 const requireAuth = (req: any, res: any, next: any) => {
-  const auth = req.headers.authorization;
-  if (!auth) return res.status(401).json({ error: 'Missing Authorization header' });
-  const token = auth.replace('Bearer ', '');
+  const token = req.cookies?.accessToken;
+  if (!token) return res.status(401).json({ error: 'Missing access token' });
   req.accessToken = token;
   next();
 };
@@ -74,6 +74,25 @@ router.get('/', requireAuth, async (req: any, res) => {
       .order('created_at', { ascending: false });
     if (error) throw error;
     return res.json(data ?? []);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message ?? 'Internal error' });
+  }
+});
+
+// Upload thumbnail via service role (bypasses Storage RLS). Auth required to ensure only signed-in users can upload.
+router.post('/upload-thumbnail', requireAuth, upload.single('file'), async (req: any, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Missing file' });
+    const ext = (req.file.originalname.split('.').pop() || 'jpg').toLowerCase();
+    const safeExt = ext.replace(/[^a-z0-9]/gi, '') || 'jpg';
+    const path = `uploads/${Date.now()}_${Math.random().toString(36).slice(2)}.${safeExt}`;
+    const { error: upErr } = await adminClient.storage.from(THUMBNAILS_BUCKET).upload(path, req.file.buffer, {
+      contentType: req.file.mimetype || 'image/jpeg',
+      upsert: true,
+    });
+    if (upErr) return res.status(400).json({ error: upErr.message || 'Upload failed' });
+    const { data: pub } = adminClient.storage.from(THUMBNAILS_BUCKET).getPublicUrl(path);
+    return res.status(201).json({ url: pub.publicUrl, path });
   } catch (err: any) {
     return res.status(500).json({ error: err.message ?? 'Internal error' });
   }
@@ -98,7 +117,6 @@ router.post('/', requireAuth, async (req: any, res) => {
       github_url: payload.githubUrl,
       deployment_url: payload.deploymentUrl,
       image_url: payload.imageUrl,
-      video_url: payload.videoUrl,
       status: payload.status,
     }).select('*').single();
     if (error) throw error;
@@ -110,6 +128,7 @@ router.post('/', requireAuth, async (req: any, res) => {
 
 router.put('/:id', requireAuth, async (req: any, res) => {
   const id = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(id)) return res.status(400).json({ error: 'Invalid id' });
   const parsed = projectSchema.partial().safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
   const userClient = getUserClient(req.accessToken);
@@ -127,7 +146,6 @@ router.put('/:id', requireAuth, async (req: any, res) => {
     if (parsed.data.githubUrl !== undefined) payload.github_url = parsed.data.githubUrl || null;
     if (parsed.data.deploymentUrl !== undefined) payload.deployment_url = parsed.data.deploymentUrl || null;
     if (parsed.data.imageUrl !== undefined) payload.image_url = parsed.data.imageUrl || null;
-    if (parsed.data.videoUrl !== undefined) payload.video_url = parsed.data.videoUrl || null;
 
     if (Object.keys(payload).length === 0) return res.status(400).json({ error: 'No fields to update' });
 
@@ -148,6 +166,7 @@ router.put('/:id', requireAuth, async (req: any, res) => {
 
 router.delete('/:id', requireAuth, async (req: any, res) => {
   const id = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(id)) return res.status(400).json({ error: 'Invalid id' });
   const userClient = getUserClient(req.accessToken);
   try {
     const { data: user, error: userErr } = await userClient.auth.getUser();

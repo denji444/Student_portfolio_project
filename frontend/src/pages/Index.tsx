@@ -2,17 +2,29 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchPublicProjects } from "@/lib/api";
 import NeoNav from "@/components/design3/NeoNav";
+import SEO from "@/components/SEO";
 import FilterBar from "@/components/design3/FilterBar";
 import NeoCard from "@/components/design3/NeoCard";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Code, ExternalLink, Github } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import FadeIn from "@/components/FadeIn";
 
 const Index = () => {
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-5">
+        <SEO
+          title="PTUT Student Portfolio — Software Engineering Technology"
+          description="Explore PTUT SET student portfolios, projects, technologies, and live demos."
+          keywords={[
+            'PTUT portfolio', 'Punjab Tianjin University of Technology portfolio',
+            'Software Engineering Technology portfolio', 'SET portfolio',
+            'student portfolio', 'student PTUT portfolio', 'PTUT projects', 'student projects PTUT'
+          ]}
+        />
         <NeoNav />
         <PublicProjectsSection />
       </main>
@@ -51,6 +63,8 @@ const PublicProjectsSection = () => {
     });
   }, [data, search, skills, languages, specs]);
 
+  
+
   if (isLoading) {
     return (
       <div className="text-center py-16">
@@ -84,9 +98,11 @@ const PublicProjectsSection = () => {
         onSearch={setSearch} onSkills={setSkills} onLanguages={setLanguages} onSpecializations={setSpecs} />
 
       {filtered && filtered.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {filtered.map((project) => (
-            <NeoCard key={project.id} project={project} onView={(p)=>{ setActive(p); setOpen(true); }} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {filtered.map((project, idx) => (
+            <FadeIn key={project.id} delayMs={60 * (idx % 9)}>
+              <NeoCard project={project} onView={(p)=>{ setActive(p); setOpen(true); }} />
+            </FadeIn>
           ))}
         </div>
       ) : (
@@ -108,15 +124,19 @@ const PublicProjectsSection = () => {
               {active.projectType && (
                 <div className="text-muted-foreground">Project Type: {active.projectType}</div>
               )}
-              {active.videoUrl || active.imageUrl ? (
-                <div className="aspect-video rounded bg-muted overflow-hidden">
-                  {active.videoUrl ? (
-                    <iframe src={active.videoUrl} className="w-full h-full" allowFullScreen title={`${active.title} demo`} />
-                  ) : (
-                    <img src={active.imageUrl} alt={active.title} className="w-full h-full object-cover" />
-                  )}
+              {/* Media preview */}
+              {active.imageUrl && (
+                <div>
+                  <div className="font-medium mb-1">Thumbnail</div>
+                  <div className="w-full rounded-lg overflow-hidden border bg-muted">
+                    <img
+                      src={active.imageUrl}
+                      alt={active.title}
+                      className="w-full h-64 object-cover"
+                    />
+                  </div>
                 </div>
-              ) : null}
+              )}
               <div>
                 <div className="font-medium mb-1">Description</div>
                 <p className="leading-relaxed whitespace-pre-wrap">{active.description}</p>

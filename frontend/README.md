@@ -1,73 +1,73 @@
-# Welcome to your Lovable project
+# PTUT Student Portfolio — Frontend
 
-## Project info
+Vite + React + TypeScript frontend for the PTUT (Punjab Tianjin University of Technology) Software Engineering Technology student portfolio.
 
-**URL**: https://lovable.dev/projects/11f4d026-4e16-4eeb-b7f6-5631a33a175e
+Live site: https://student-portfolio-gppt.onrender.com/
 
-## How can I edit this code?
+## Tech Stack
+- Vite, React 18, TypeScript
+- Tailwind CSS, shadcn/ui (Radix primitives)
+- React Router, TanStack Query
+- Supabase (auth, storage integration via backend)
 
-There are several ways of editing your application.
+## Local Development
+From repo root (monorepo), run:
 
-**Use Lovable**
+```bash
+npm install
+npm --prefix frontend install
+npm --prefix backend install
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/11f4d026-4e16-4eeb-b7f6-5631a33a175e) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Dev servers:
+- Frontend: http://localhost:8080 (Vite; proxies /api to backend)
+- Backend: http://localhost:4000
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Environment Variables
+Create `frontend/.env` and set:
 
-**Use GitHub Codespaces**
+```
+VITE_SITE_URL=https://student-portfolio-gppt.onrender.com
+VITE_OG_IMAGE=https://student-portfolio-gppt.onrender.com/ptut-logo.png
+# Optional: override backend API base; by default relative /api is proxied in dev
+# VITE_API_BASE_URL=https://student-portfolio-gppt.onrender.com
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## SEO
+- Global tags in `index.html`
+- Reusable `<SEO />` component in `src/components/SEO.tsx` for per-page meta, OG/Twitter, canonical, and JSON‑LD.
+- `public/robots.txt` and `public/sitemap.xml` are included.
 
-## What technologies are used for this project?
+## Useful Scripts
+```bash
+npm run dev       # start frontend and backend together (monorepo root)
+npm --prefix frontend run build
+npm --prefix frontend run preview
+```
 
-This project is built with:
+## Project Structure (frontend)
+```
+frontend/
+  public/            # static assets, robots.txt, sitemap.xml
+  src/
+    components/      # UI components
+    pages/           # route components
+    lib/             # API/supabase helpers
+    hooks/           # custom hooks
+    types/           # shared types
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Deployment
+Build the frontend from repo root:
 
-## How can I deploy this project?
+```bash
+npm --prefix frontend run build
+```
 
-Simply open [Lovable](https://lovable.dev/projects/11f4d026-4e16-4eeb-b7f6-5631a33a175e) and click on Share -> Publish.
+Serve `frontend/dist` behind your preferred host (Render, Netlify, etc.). The backend serves API on port 4000 in development and your hosted URL in production.
 
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+## Notes
+- Thumbnail uploads: performed via backend endpoint `/api/projects/upload-thumbnail` (service role), not directly to Supabase from the browser.
+- Auth cookies: Vite dev proxy ensures same‑origin cookies in development.

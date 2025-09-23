@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import NeoNav from '@/components/design3/NeoNav';
+import SEO from '@/components/SEO';
 import { supabase } from '@/lib/supabaseClient';
 
 const signupSchema = z.object({
@@ -47,25 +48,27 @@ const Auth = () => {
   const signupMutation = useMutation({
     mutationFn: signup,
     onSuccess: () => {
-      toast({ title: 'Account created', description: 'Please verify your email, then sign in.' });
-      setMode('signin');
+      toast({ title: 'Account created' });
+      navigate(`/verify-email?email=${encodeURIComponent(signupForm.email)}`);
     },
     onError: (e: any) => toast({ title: 'Signup failed', description: e.message, variant: 'destructive' }),
   });
 
   const signinMutation = useMutation({
     mutationFn: signin,
-    onSuccess: (res) => {
-      // Initialize Supabase client session so Storage RLS allows uploads
-      if (res.accessToken && res.refreshToken) {
-        void supabase.auth.setSession({ access_token: res.accessToken, refresh_token: res.refreshToken });
-      }
-      localStorage.setItem('accessToken', res.accessToken);
-      if (res.refreshToken) localStorage.setItem('refreshToken', res.refreshToken);
+    onSuccess: () => {
       toast({ title: 'Signed in' });
       navigate('/dashboard');
     },
-    onError: (e: any) => toast({ title: 'Signin failed', description: e.message, variant: 'destructive' }),
+    onError: (e: any) => {
+      const message = e?.message || '';
+      if (message.toLowerCase().includes('not verified')) {
+        toast({ title: 'Email not verified', description: 'Please check your inbox for the verification email.' });
+        navigate(`/verify-email?email=${encodeURIComponent(signinForm.email)}`);
+        return;
+      }
+      toast({ title: 'Signin failed', description: message, variant: 'destructive' });
+    },
   });
 
   const handleSignup = (e: React.FormEvent) => {
@@ -93,6 +96,7 @@ const Auth = () => {
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+        <SEO title="Sign in / Sign up — PTUT Student Portfolio" description="Access your PTUT SET student portfolio account." robots="noindex,nofollow" />
         <NeoNav />
         <div className="flex items-center justify-center">
         <Card className="w-full max-w-md">

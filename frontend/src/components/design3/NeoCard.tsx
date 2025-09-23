@@ -9,11 +9,13 @@ type Props = {
 
 export default function NeoCard({ project, onView }: Props) {
   return (
-    <article className="bg-white border rounded-[18px] shadow-[4px_4px_10px_rgba(15,23,42,0.06),_-4px_-4px_10px_rgba(255,255,255,0.8)] overflow-hidden">
+    <article className="bg-white border rounded-[18px] shadow-[4px_4px_10px_rgba(15,23,42,0.06),_-4px_-4px_10px_rgba(255,255,255,0.8)] overflow-hidden transition-transform duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md">
       <div className="h-40 bg-muted overflow-hidden">
         {project.imageUrl ? (
           <img src={project.imageUrl} alt={project.title} className="h-full w-full object-cover" />
-        ) : null}
+        ) : (
+          <div className="h-full w-full grid place-items-center text-muted-foreground">No thumbnail</div>
+        )}
       </div>
       <div className="p-3">
         {project.badge && <span className="inline-block bg-foreground text-white rounded-full text-xs px-2 py-1">{project.badge}</span>}

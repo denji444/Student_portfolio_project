@@ -25,7 +25,6 @@ create table if not exists public.projects (
   github_url text,
   deployment_url text,
   image_url text,
-  video_url text,
   status text check (status in ('completed','in-progress','planned')) default 'planned',
   created_at timestamptz not null default now()
 );
@@ -80,5 +79,13 @@ end $$;
 -- Ensure column exists when updating an existing database
 alter table if exists public.projects
   add column if not exists functional_requirements text[] not null default '{}';
+
+-- Backfill migration helper: drop obsolete columns if they exist
+alter table if exists public.projects
+  drop column if exists video_url;
+
+-- Ensure thumbnail support exists
+alter table if exists public.projects
+  add column if not exists image_url text;
 
 

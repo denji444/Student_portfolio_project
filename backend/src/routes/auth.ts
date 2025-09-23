@@ -1,8 +1,10 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { adminClient, publicClient } from '../config/supabase.js';
 
 const router = Router();
+const authLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 60 });
 
 const signupSchema = z.object({
   fullName: z.string().min(1),
@@ -21,7 +23,7 @@ const signinSchema = z.object({
   password: z.string().min(8),
 });
 
-router.post('/signup', async (req, res) => {
+router.post('/signup', authLimiter, async (req, res) => {
   const parse = signupSchema.safeParse(req.body);
   if (!parse.success) {
     return res.status(400).json({ error: 'Invalid input', details: parse.error.flatten() });
@@ -71,7 +73,7 @@ router.post('/signup', async (req, res) => {
   }
 });
 
-router.post('/signin', async (req, res) => {
+router.post('/signin', authLimiter, async (req, res) => {
   const parse = signinSchema.safeParse(req.body);
   if (!parse.success) {
     return res.status(400).json({ error: 'Invalid input', details: parse.error.flatten() });
@@ -88,7 +90,26 @@ router.post('/signin', async (req, res) => {
       return res.status(403).json({ error: 'Email not verified. Please check your inbox.' });
     }
     const { access_token, refresh_token, user } = data.session;
-    return res.status(200).json({ accessToken: access_token, refreshToken: refresh_token, user });
+    // Set httpOnly cookies (secure in production, lax samesite)
+    // IMPORTANT: Do not default to 'production' when NODE_ENV is unset, to avoid setting secure cookies in dev.
+    const isProd = process.env.NODE_ENV === 'production';
+    res.cookie('accessToken', access_token, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'lax',
+      maxAge: 1000 * 60 * 60, // 1h
+      path: '/',
+    });
+    if (refresh_token) {
+      res.cookie('refreshToken', refresh_token, {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: 'lax',
+        maxAge: 1000 * 60 * 60 * 24 * 7, // 7d
+        path: '/',
+      });
+    }
+    return res.status(200).json({ message: 'Signed in', user });
   } catch (err: any) {
     return res.status(500).json({ error: err.message ?? 'Internal error' });
   }
@@ -97,14 +118,61 @@ router.post('/signin', async (req, res) => {
 export default router;
 
 // Refresh access token
-router.post('/refresh', async (req, res) => {
-  const refreshToken = req.body?.refreshToken as string | undefined;
+router.post('/refresh', authLimiter, async (req, res) => {
+  const refreshToken = (req.cookies?.refreshToken as string | undefined) || (req.body?.refreshToken as string | undefined);
   if (!refreshToken) return res.status(400).json({ error: 'Missing refreshToken' });
   try {
     const { data, error } = await publicClient.auth.refreshSession({ refresh_token: refreshToken });
     if (error || !data.session) return res.status(401).json({ error: 'Invalid refresh token' });
     const { access_token, refresh_token, user } = data.session;
-    return res.status(200).json({ accessToken: access_token, refreshToken: refresh_token ?? refreshToken, user });
+    const isProd = process.env.NODE_ENV === 'production';
+    res.cookie('accessToken', access_token, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'lax',
+      maxAge: 1000 * 60 * 60,
+      path: '/',
+    });
+    if (refresh_token) {
+      res.cookie('refreshToken', refresh_token, {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: 'lax',
+        maxAge: 1000 * 60 * 60 * 24 * 7,
+        path: '/',
+      });
+    }
+    return res.status(200).json({ message: 'Refreshed', user });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message ?? 'Internal error' });
+  }
+});
+
+// Logout clears cookies
+router.post('/logout', authLimiter, async (_req, res) => {
+  const isProd = process.env.NODE_ENV === 'production';
+  res.clearCookie('accessToken', { httpOnly: true, secure: isProd, sameSite: 'lax', path: '/' });
+  res.clearCookie('refreshToken', { httpOnly: true, secure: isProd, sameSite: 'lax', path: '/' });
+  return res.json({ message: 'Logged out' });
+});
+
+// Resend email verification
+router.post('/resend-verification', authLimiter, async (req, res) => {
+  const email = (req.body?.email as string | undefined)?.trim();
+  if (!email) return res.status(400).json({ error: 'Missing email' });
+  try {
+    // Correct approach: use public client resend to re-send signup confirmation
+    const { data, error } = await publicClient.auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: process.env.EMAIL_REDIRECT_URL || undefined } as any,
+    } as any);
+    if (error) {
+      // Surface friendly message for common cases
+      const msg = error.message || 'Unable to resend verification';
+      return res.status(400).json({ error: msg });
+    }
+    return res.status(200).json({ message: 'Verification email resent' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message ?? 'Internal error' });
   }
