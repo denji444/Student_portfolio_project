@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { adminClient, getUserClient, publicClient } from '../config/supabase.js';
 import multer from 'multer';
@@ -24,7 +24,7 @@ const projectSchema = z.object({
 });
 
 // Public list: newest first
-router.get('/public', async (_req, res) => {
+router.get('/public', async (_req: Request, res: Response) => {
   try {
     const { data, error } = await adminClient
       .from('projects')
@@ -54,15 +54,15 @@ router.get('/public', async (_req, res) => {
 });
 
 // Auth required middleware - reads from cookies
-const requireAuth = (req: any, res: any, next: any) => {
-  const token = req.cookies?.accessToken;
+const requireAuth = (req: Request & { accessToken?: string }, res: Response, next: NextFunction) => {
+  const token = (req as any).cookies?.accessToken;
   if (!token) return res.status(401).json({ error: 'Missing access token' });
-  req.accessToken = token;
+  (req as any).accessToken = token;
   next();
 };
 
-router.get('/', requireAuth, async (req: any, res) => {
-  const userClient = getUserClient(req.accessToken);
+router.get('/', requireAuth, async (req: Request & { accessToken?: string }, res: Response) => {
+  const userClient = getUserClient((req as any).accessToken);
   try {
     const { data: user, error: userErr } = await userClient.auth.getUser();
     if (userErr || !user.user) return res.status(401).json({ error: 'Invalid token' });
@@ -80,14 +80,15 @@ router.get('/', requireAuth, async (req: any, res) => {
 });
 
 // Upload thumbnail via service role (bypasses Storage RLS). Auth required to ensure only signed-in users can upload.
-router.post('/upload-thumbnail', requireAuth, upload.single('file'), async (req: any, res) => {
+router.post('/upload-thumbnail', requireAuth, upload.single('file'), async (req: Request & { file?: Express.Multer.File; accessToken?: string }, res: Response) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'Missing file' });
-    const ext = (req.file.originalname.split('.').pop() || 'jpg').toLowerCase();
+    const file = (req as any).file as Express.Multer.File | undefined;
+    if (!file) return res.status(400).json({ error: 'Missing file' });
+    const ext = (file.originalname.split('.').pop() || 'jpg').toLowerCase();
     const safeExt = ext.replace(/[^a-z0-9]/gi, '') || 'jpg';
     const path = `uploads/${Date.now()}_${Math.random().toString(36).slice(2)}.${safeExt}`;
-    const { error: upErr } = await adminClient.storage.from(THUMBNAILS_BUCKET).upload(path, req.file.buffer, {
-      contentType: req.file.mimetype || 'image/jpeg',
+    const { error: upErr } = await adminClient.storage.from(THUMBNAILS_BUCKET).upload(path, file.buffer, {
+      contentType: file.mimetype || 'image/jpeg',
       upsert: true,
     });
     if (upErr) return res.status(400).json({ error: upErr.message || 'Upload failed' });
@@ -98,10 +99,10 @@ router.post('/upload-thumbnail', requireAuth, upload.single('file'), async (req:
   }
 });
 
-router.post('/', requireAuth, async (req: any, res) => {
-  const parsed = projectSchema.safeParse(req.body);
+router.post('/', requireAuth, async (req: Request & { accessToken?: string }, res: Response) => {
+  const parsed = projectSchema.safeParse((req as any).body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
-  const userClient = getUserClient(req.accessToken);
+  const userClient = getUserClient((req as any).accessToken);
   try {
     const { data: user, error: userErr } = await userClient.auth.getUser();
     if (userErr || !user.user) return res.status(401).json({ error: 'Invalid token' });
@@ -112,7 +113,7 @@ router.post('/', requireAuth, async (req: any, res) => {
       title: payload.title,
       description: payload.description,
       technologies: payload.technologies,
-    functional_requirements: payload.functionalRequirements ?? [],
+      functional_requirements: payload.functionalRequirements ?? [],
       project_type: payload.projectType,
       github_url: payload.githubUrl,
       deployment_url: payload.deploymentUrl,
@@ -126,12 +127,11 @@ router.post('/', requireAuth, async (req: any, res) => {
   }
 });
 
-router.put('/:id', requireAuth, async (req: any, res) => {
-  const id = req.params.id;
-  if (!/^[-a-f0-9]{36}$/i.test(id)) return res.status(400).json({ error: 'Invalid id' });
-  const parsed = projectSchema.partial().safeParse(req.body);
+router.put('/:id', requireAuth, async (req: Request & { accessToken?: string, params: { id: string } }, res: Response) => {
+  const id = (req as any).params.id as string;
+  const parsed = projectSchema.partial().safeParse((req as any).body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
-  const userClient = getUserClient(req.accessToken);
+  const userClient = getUserClient((req as any).accessToken);
   try {
     const { data: user, error: userErr } = await userClient.auth.getUser();
     if (userErr || !user.user) return res.status(401).json({ error: 'Invalid token' });
@@ -140,7 +140,7 @@ router.put('/:id', requireAuth, async (req: any, res) => {
     if (parsed.data.title !== undefined) payload.title = parsed.data.title;
     if (parsed.data.description !== undefined) payload.description = parsed.data.description;
     if (parsed.data.technologies !== undefined) payload.technologies = parsed.data.technologies;
-  if (parsed.data.functionalRequirements !== undefined) payload.functional_requirements = parsed.data.functionalRequirements;
+    if (parsed.data.functionalRequirements !== undefined) payload.functional_requirements = parsed.data.functionalRequirements;
     if (parsed.data.status !== undefined) payload.status = parsed.data.status;
     if (parsed.data.projectType !== undefined) payload.project_type = parsed.data.projectType || null;
     if (parsed.data.githubUrl !== undefined) payload.github_url = parsed.data.githubUrl || null;
@@ -164,10 +164,9 @@ router.put('/:id', requireAuth, async (req: any, res) => {
   }
 });
 
-router.delete('/:id', requireAuth, async (req: any, res) => {
-  const id = req.params.id;
-  if (!/^[-a-f0-9]{36}$/i.test(id)) return res.status(400).json({ error: 'Invalid id' });
-  const userClient = getUserClient(req.accessToken);
+router.delete('/:id', requireAuth, async (req: Request & { accessToken?: string, params: { id: string } }, res: Response) => {
+  const id = (req as any).params.id as string;
+  const userClient = getUserClient((req as any).accessToken);
   try {
     const { data: user, error: userErr } = await userClient.auth.getUser();
     if (userErr || !user.user) return res.status(401).json({ error: 'Invalid token' });
