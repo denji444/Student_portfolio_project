@@ -30,19 +30,40 @@ app.use(helmet({
 // Prevent HTTP parameter pollution
 app.use(hpp());
 
-// Strict CORS with optional whitelist
-const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').map(s=>s.trim()).filter(Boolean);
-app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true);
-    if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) return cb(null, true);
-    return cb(new Error('CORS not allowed'));
-  },
-  credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  optionsSuccessStatus: 204,
-}));
+// Strict CORS with optional whitelist (comma-separated in CORS_ORIGINS)
+const allowedOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+const corsOptions: cors.CorsOptions = allowedOrigins.length > 0
+  ? {
+      origin: (origin, cb) => {
+        if (!origin) return cb(null, true);
+        if (allowedOrigins.includes(origin)) return cb(null, true);
+        return cb(new Error('CORS not allowed'));
+      },
+      credentials: true,
+      allowedHeaders: ['Content-Type', 'Authorization'],
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      optionsSuccessStatus: 204,
+    }
+  : {
+      // Mirror requesting origin when no whitelist provided (useful during initial deploy/debug)
+      origin: true,
+      credentials: true,
+      allowedHeaders: ['Content-Type', 'Authorization'],
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      optionsSuccessStatus: 204,
+    };
+
+app.use((req, res, next) => {
+  res.header('Vary', 'Origin');
+  next();
+});
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // JSON body parsing with size limits
 app.use(express.json({ limit: '200kb' }));
