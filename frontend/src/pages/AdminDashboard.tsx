@@ -115,6 +115,17 @@ const AdminDashboard = () => {
     }
   };
 
+  const verifyEmail = async (studentId: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/students/${studentId}/verify-email`, { method: 'POST', headers: adminHeaders() });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || 'Verify failed');
+      toast({ title: 'Email verified', description: 'Student can now sign in.' });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem('adminAccessToken');
     window.location.href = '/admin/login';
@@ -247,6 +258,7 @@ const AdminDashboard = () => {
                       <Button size="sm" variant="destructive" onClick={()=>deleteStudent(s.id)}>Delete</Button>
                       <Button size="sm" variant="secondary" onClick={()=>{ setModerationStudent(s); void loadStudentProjects(s.id); }}>View Projects</Button>
                       <Button size="sm" variant="outline" onClick={()=>resetPassword(s.id)}>Reset Password</Button>
+                      <Button size="sm" variant="outline" onClick={()=>verifyEmail(s.id)}>Verify Email</Button>
                     </div>
                   </div>
                 ))}

@@ -237,3 +237,17 @@ router.post('/students/:id/reset-password', requireAdmin, authLimiter, async (re
     return res.status(500).json({ error: err.message ?? 'Internal error' });
   }
 });
+
+// Manually verify a student's email (admin action)
+router.post('/students/:id/verify-email', requireAdmin, authLimiter, async (req, res) => {
+  const id = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(id)) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    // Confirm the user's email using Supabase Admin API
+    const { error } = await adminClient.auth.admin.updateUserById(id, { email_confirm: true } as any);
+    if (error) throw error;
+    return res.json({ message: 'Email marked as verified' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message ?? 'Internal error' });
+  }
+});
