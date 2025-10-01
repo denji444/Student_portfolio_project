@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { z } from 'zod';
 import { useMutation } from '@tanstack/react-query';
-import { signup, signin } from '@/lib/api';
+import { signup, signin, startGoogleOAuth } from '@/lib/api';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -11,6 +11,9 @@ import { Eye, EyeOff } from 'lucide-react';
 import NeoNav from '@/components/design3/NeoNav';
 import SEO from '@/components/SEO';
 import { supabase } from '@/lib/supabaseClient';
+
+type SignupInput = Parameters<typeof signup>[0];
+type SigninInput = Parameters<typeof signin>[0];
 
 const signupSchema = z.object({
   fullName: z.string().min(1, 'Full name is required'),
@@ -26,6 +29,9 @@ const signinSchema = z.object({
   password: z.string().min(8,'Min 8 chars'),
 });
 
+type SignupForm = z.infer<typeof signupSchema>;
+type SigninForm = z.infer<typeof signinSchema>;
+
 const Field = ({label, required=false, children}:{label:string;required?:boolean;children:any}) => (
   <div className="space-y-1">
     <label className="text-sm font-medium text-foreground">
@@ -39,13 +45,13 @@ const Auth = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [mode, setMode] = useState<'signin'|'signup'>('signup');
-  const [signupForm, setSignupForm] = useState({ fullName:'', rollNumber:'', email:'', phone:'', password:'', confirmPassword:'' });
-  const [signinForm, setSigninForm] = useState({ email:'', password:'' });
+  const [signupForm, setSignupForm] = useState<SignupForm>({ fullName:'', rollNumber:'', email:'', phone:'', password:'', confirmPassword:'' });
+  const [signinForm, setSigninForm] = useState<SigninForm>({ email:'', password:'' });
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [showSignupConfirm, setShowSignupConfirm] = useState(false);
   const [showSigninPassword, setShowSigninPassword] = useState(false);
 
-  const signupMutation = useMutation({
+  const signupMutation = useMutation<{ message: string }, Error, SignupInput>({
     mutationFn: signup,
     onSuccess: () => {
       toast({ title: 'Account created' });
@@ -54,7 +60,7 @@ const Auth = () => {
     onError: (e: any) => toast({ title: 'Signup failed', description: e.message, variant: 'destructive' }),
   });
 
-  const signinMutation = useMutation({
+  const signinMutation = useMutation<{ message: string }, Error, SigninInput>({
     mutationFn: signin,
     onSuccess: () => {
       toast({ title: 'Signed in' });
@@ -79,7 +85,12 @@ const Auth = () => {
       toast({ title: 'Validation error', description: msg, variant: 'destructive' });
       return;
     }
-    signupMutation.mutate(parsed.data);
+    signupMutation.mutate(parsed.data as SignupInput);
+  };
+
+  const handleGoogle = () => {
+    // After success, backend redirects to /dashboard by default
+    startGoogleOAuth('/dashboard');
   };
 
   const handleSignin = (e: React.FormEvent) => {
@@ -90,7 +101,7 @@ const Auth = () => {
       toast({ title: 'Validation error', description: msg, variant: 'destructive' });
       return;
     }
-    signinMutation.mutate(parsed.data);
+    signinMutation.mutate(parsed.data as SigninInput);
   };
 
   return (
@@ -137,7 +148,16 @@ const Auth = () => {
                     </button>
                   </div>
                 </Field>
-                <Button type="submit" className="w-full" disabled={signupMutation.isLoading}>Create account</Button>
+                <Button type="submit" className="w-full" disabled={signupMutation.isPending}>Create account</Button>
+                <div className="relative my-2">
+                  <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-white px-2 text-muted-foreground">or</span>
+                  </div>
+                </div>
+                <Button type="button" variant="outline" className="w-full" onClick={handleGoogle}>
+                  Continue with Google
+                </Button>
               </form>
             ) : (
               <form className="space-y-3" onSubmit={handleSignin}>
@@ -152,7 +172,19 @@ const Auth = () => {
                     </button>
                   </div>
                 </Field>
-                <Button type="submit" className="w-full" disabled={signinMutation.isLoading}>Sign in</Button>
+                <div className="text-right text-sm">
+                  <Link to="/reset-password" className="underline text-muted-foreground">Forgot password?</Link>
+                </div>
+                <Button type="submit" className="w-full" disabled={signinMutation.isPending}>Sign in</Button>
+                <div className="relative my-2">
+                  <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-white px-2 text-muted-foreground">or</span>
+                  </div>
+                </div>
+                <Button type="button" variant="outline" className="w-full" onClick={handleGoogle}>
+                  Continue with Google
+                </Button>
               </form>
             )}
           </CardContent>

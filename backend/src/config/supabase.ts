@@ -14,7 +14,14 @@ export const adminClient: SupabaseClient = createClient(supabaseUrl, supabaseSer
 });
 
 export const publicClient: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    // Ensure authorization code + PKCE flow is used for OAuth
+    flowType: 'pkce',
+    // We're on the server; do not attempt to parse hash fragments in URLs
+    detectSessionInUrl: false,
+  },
 });
 
 export const getUserClient = (accessToken: string): SupabaseClient => {

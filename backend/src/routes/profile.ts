@@ -6,6 +6,7 @@ const router = Router();
 
 const updateSchema = z.object({
   fullName: z.string().min(1).optional(),
+  rollNumber: z.string().regex(/^SET-\d{2}-\d{3}$/).optional(),
   phone: z.string().regex(/^03\d{9}$/).optional(),
   profileImageUrl: z.string().url().optional(),
 });
@@ -23,12 +24,36 @@ router.get('/me', requireAuth, async (req: any, res) => {
     const { data: user, error: userErr } = await userClient.auth.getUser();
     if (userErr || !user.user) return res.status(401).json({ error: 'Invalid token' });
     const userId = user.user.id;
-    const { data, error } = await adminClient
+    const fullName = (user.user.user_metadata?.full_name as string | undefined) || (user.user.user_metadata?.name as string | undefined) || '';
+    const email = user.user.email || '';
+
+    // Fetch existing profile
+    let { data, error } = await adminClient
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .maybeSingle();
     if (error) throw error;
+
+    // If missing, create a minimal profile row
+    if (!data) {
+      const { error: insErr } = await adminClient
+        .from('profiles')
+        .insert({ id: userId, full_name: fullName, email });
+      if (insErr) {
+        // eslint-disable-next-line no-console
+        console.error('[Profile] Failed to auto-create profile for user', userId, insErr.message);
+      } else {
+        // Re-fetch
+        const re = await adminClient
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+        if (!re.error) data = re.data as any;
+      }
+    }
+
     if (!data) return res.status(404).json({ error: 'Profile not found' });
     return res.json({
       id: data.id,
@@ -55,6 +80,7 @@ router.put('/me', requireAuth, async (req: any, res) => {
     const userId = user.user.id;
     const payload: Record<string, any> = {};
     if (parse.data.fullName !== undefined) payload.full_name = parse.data.fullName;
+    if (parse.data.rollNumber !== undefined) payload.roll_number = parse.data.rollNumber;
     if (parse.data.phone !== undefined) payload.phone = parse.data.phone;
     if (parse.data.profileImageUrl !== undefined) payload.profile_image_url = parse.data.profileImageUrl;
     if (Object.keys(payload).length === 0) return res.status(400).json({ error: 'No fields to update' });

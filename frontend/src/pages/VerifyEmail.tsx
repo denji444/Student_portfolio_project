@@ -57,7 +57,7 @@ const VerifyEmail = () => {
                 <Button variant="outline" onClick={() => navigate('/auth')}>Back to sign in</Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Having trouble? Contact admin at <a className="underline" href="mailto:admin@example.com">admin@example.com</a>.
+                Having trouble? Contact admin at <a className="underline" href="mailto:noreplytostudent@gmail.com">noreplytostudent@gmail.com</a>.
               </p>
             </CardContent>
           </Card>

@@ -11,6 +11,7 @@ type PublicProjectApi = {
   title: string;
   description: string;
   technologies: string[];
+  functionalRequirements?: string[];
   projectType?: string;
   githubUrl?: string;
   deploymentUrl?: string;
@@ -20,6 +21,7 @@ type PublicProjectApi = {
   createdAt: string;
   owner?: { full_name?: string; roll_number?: string; email?: string; profile_image_url?: string | null } | null;
   comments: { id: string; content: string; created_at: string }[];
+  requirements?: { planned: string[]; implemented: string[] };
 };
 
 export async function fetchPublicProjects(): Promise<Project[]> {
@@ -42,6 +44,7 @@ export async function fetchPublicProjects(): Promise<Project[]> {
     createdAt: p.createdAt ?? p.created_at,
     owner: p.owner ?? null,
     comments: p.comments ?? [],
+    requirements: p.requirements ?? undefined,
   }));
   // Map to frontend Project type; use createdAt as completionDate display value
   return normalized.map((p) => ({
@@ -50,6 +53,7 @@ export async function fetchPublicProjects(): Promise<Project[]> {
     description: p.description,
     technologies: p.technologies,
     functionalRequirements: p.functionalRequirements,
+     requirements: p.requirements,
     projectType: p.projectType,
     githubUrl: p.githubUrl,
     deploymentUrl: p.deploymentUrl,
@@ -63,6 +67,14 @@ export async function fetchPublicProjects(): Promise<Project[]> {
     ownerImageUrl: p.owner?.profile_image_url ?? null,
     comments: p.comments,
   }));
+}
+
+export function startGoogleOAuth(redirect: string = '/dashboard') {
+  const params = new URLSearchParams();
+  if (redirect) params.set('redirect', redirect);
+  // Use same API_BASE_URL resolution as above; empty string works with Vite proxy
+  const url = `${API_BASE_URL}/api/auth/oauth/google?${params.toString()}`;
+  window.location.href = url;
 }
 
 export async function signup(payload: {
@@ -107,6 +119,30 @@ export async function resendVerification(payload: { email: string }): Promise<{ 
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json?.error || 'Failed to resend verification email');
+  return json;
+}
+
+export async function requestPasswordReset(payload: { email: string }): Promise<{ message: string }>
+{
+  const res = await fetch(`${API_BASE_URL}/api/auth/password-reset/request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || 'Failed to request password reset');
+  return json;
+}
+
+export async function resetPassword(payload: { token: string; newPassword: string }): Promise<{ message: string }>
+{
+  const res = await fetch(`${API_BASE_URL}/api/auth/password-reset/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || 'Failed to reset password');
   return json;
 }
 
@@ -171,13 +207,44 @@ export async function deleteProject(id: string) {
   return json;
 }
 
+// Project Requirements API
+export async function listRequirements(projectId: string) {
+  const res = await requestWithAuth(`${API_BASE_URL}/api/projects/${projectId}/requirements`, { method: 'GET' });
+  if (res.status === 401 || res.status === 403) throw new Error('UNAUTHORIZED');
+  if (!res.ok) throw new Error('Failed to load requirements');
+  return res.json() as Promise<Array<{ id: string; project_id: string; content: string; status: 'planned'|'implemented'; created_at: string }>>;
+}
+
+export async function addRequirement(projectId: string, content: string, status: 'planned'|'implemented' = 'planned') {
+  const res = await requestWithAuth(`${API_BASE_URL}/api/projects/${projectId}/requirements`, { method: 'POST', body: JSON.stringify({ content, status }) });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || 'Failed to add requirement');
+  return json;
+}
+
+export async function updateRequirement(id: string, patch: Partial<{ content: string; status: 'planned'|'implemented' }>) {
+  const res = await requestWithAuth(`${API_BASE_URL}/api/projects/requirements/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || 'Failed to update requirement');
+  return json;
+}
+
+export async function deleteRequirement(id: string) {
+  const res = await requestWithAuth(`${API_BASE_URL}/api/projects/requirements/${id}`, { method: 'DELETE' });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || 'Failed to delete requirement');
+  return json;
+}
+
 export async function getMyProfile() {
   const res = await requestWithAuth(`${API_BASE_URL}/api/profile/me`, { method: 'GET' });
+  if (res.status === 401 || res.status === 403) throw new Error('UNAUTHORIZED');
+  if (res.status === 404) return null;
   if (!res.ok) throw new Error('Failed to load profile');
   return res.json();
 }
 
-export async function updateMyProfile(input: { fullName?: string; phone?: string; profileImageUrl?: string; avatarPath?: string }) {
+export async function updateMyProfile(input: { fullName?: string; rollNumber?: string; phone?: string; profileImageUrl?: string; avatarPath?: string }) {
   const res = await requestWithAuth(`${API_BASE_URL}/api/profile/me`, { method: 'PUT', body: JSON.stringify(input) });
   const json = await res.json();
   if (!res.ok) throw new Error(json?.error || 'Failed to update profile');

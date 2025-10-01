@@ -14,17 +14,41 @@ import profileRoutes from './routes/profile.js';
 const app = express();
 
 // Security headers
+    const isProd = process.env.NODE_ENV === 'production';
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
-  contentSecurityPolicy: {
-    useDefaults: true,
-    directives: {
-      defaultSrc: ["'none'"],
-      frameAncestors: ["'none'"],
-      baseUri: ["'none'"],
-      formAction: ["'none'"],
-    },
-  },
+  // In development, disable CSP to avoid blocking local tools and OAuth flows
+  contentSecurityPolicy: isProd
+    ? {
+        useDefaults: true,
+        directives: {
+          // Keep restrictive defaults, but explicitly allow required connections
+          defaultSrc: ["'self'"],
+          baseUri: ["'self'"],
+          frameAncestors: ["'none'"],
+          formAction: ["'self'"],
+          connectSrc: [
+            "'self'",
+            // Supabase APIs
+            'https://*.supabase.co',
+            // Google OAuth endpoints
+            'https://accounts.google.com',
+            'https://apis.google.com',
+          ],
+          scriptSrc: [
+            "'self'",
+            // For Google OAuth SDK scripts
+            'https://apis.google.com',
+          ],
+          imgSrc: ["'self'", 'data:', 'https:'],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          frameSrc: [
+            "'self'",
+            'https://accounts.google.com',
+          ],
+        },
+      }
+    : false,
 }));
 
 // Prevent HTTP parameter pollution

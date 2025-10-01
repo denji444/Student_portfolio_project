@@ -141,16 +141,37 @@ const PublicProjectsSection = () => {
                 <div className="font-medium mb-1">Description</div>
                 <p className="leading-relaxed whitespace-pre-wrap">{active.description}</p>
               </div>
-              {Array.isArray(active.functionalRequirements) && active.functionalRequirements.length > 0 && (
+              {active.requirements ? (
                 <div>
                   <div className="font-medium mb-1">Functional Requirements</div>
-                  <ul className="list-disc pl-5 space-y-1">
-                    {active.functionalRequirements.map((fr: string, idx: number) => (
-                      <li key={`${idx}-${fr}`}>{fr}</li>
-                    ))}
-                  </ul>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm font-semibold mb-1">Planned</div>
+                      {active.requirements.planned.length > 0 ? (
+                        <ul className="list-disc pl-5 space-y-1">
+                          {active.requirements.planned.map((fr: string, idx: number) => (
+                            <li key={`planned-${idx}-${fr}`}>{fr}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="text-muted-foreground text-sm">None</div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold mb-1">Implemented</div>
+                      {active.requirements.implemented.length > 0 ? (
+                        <ul className="list-disc pl-5 space-y-1">
+                          {active.requirements.implemented.map((fr: string, idx: number) => (
+                            <li key={`impl-${idx}-${fr}`}>{fr}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="text-muted-foreground text-sm">None</div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              )}
+              ) : null}
               <div>
                 <div className="flex items-center gap-2 mb-1"><Code className="h-4 w-4 text-muted-foreground" /><span className="font-medium">Technologies</span></div>
                 <div className="flex flex-wrap gap-1">

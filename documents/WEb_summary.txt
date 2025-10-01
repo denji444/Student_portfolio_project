@@ -1,0 +1,259 @@
+Student Portfolio Website — Full System Description
+
+1) Project Overview
+- Purpose: A platform for PTUT (Punjab Tianjin University of Technology) Software Engineering Technology students to showcase portfolios and projects. Public visitors can browse projects; students can sign up, manage profiles, and add projects; admins can moderate.
+- Monorepo Layout:
+  - frontend/ — Vite + React + TypeScript + Tailwind + shadcn/ui. Routes defined in src/App.tsx.
+  - backend/ — Node + Express + TypeScript. Supabase used for auth, DB, and storage.
+- Live URL (from frontend README): https://student-portfolio-gppt.onrender.com/
+
+2) User Roles and Capabilities
+- Public Visitor
+  - Browse all published student projects from the landing page (`frontend/src/pages/Index.tsx`).
+  - Filter and search by query, technology, and specialization (project type).
+  - View project details (title, description, technologies, functional requirements, links, thumbnail).
+- Student
+  - Sign up, verify email, sign in (`/auth`, `/verify-email`).
+  - Maintain profile (`/profile`): name, phone, avatar URL.
+  - Manage projects (`/dashboard`): create, update, delete projects; upload a thumbnail via backend.
+- Admin
+  - Authenticate using admin credentials (`/admin/login`).
+  - Use the Admin Dashboard (`/admin`) to:
+    - List/search students.
+    - Edit student profile fields (name, phone).
+    - View a student’s projects; open detailed view; delete any project.
+    - Add/delete admin comments to projects. Student receives an email when admin comments.
+    - Reset a student password.
+    - Mark a student’s email as verified manually.
+
+3) Frontend — Key Pages and Components
+- Routing (`frontend/src/App.tsx`):
+  - `/` → `Index.tsx` (public project catalog)
+  - `/auth` → `Auth.tsx` (student signup/signin)
+  - `/verify-email` → `VerifyEmail.tsx` (instructions/flow)
+  - `/dashboard` → `Dashboard.tsx` (student area for project CRUD)
+  - `/profile` → `Profile.tsx` (student profile management)
+  - `/admin/login` → `AdminLogin.tsx`
+  - `/admin` → `AdminDashboard.tsx`
+  - `*` → `NotFound.tsx`
+- Top Navigation (`frontend/src/components/design3/NeoNav.tsx`):
+  - Shows brand, Home, and conditional links based on auth state (`/dashboard`, `/profile`, logout or login button).
+  - Auth check is performed via `GET {VITE_API_BASE_URL}/api/profile/me` with cookies.
+  - Logout calls `POST /api/auth/logout` then clears state and navigates home.
+- Public Projects Catalog (`frontend/src/pages/Index.tsx`):
+  - Fetches public projects via `fetchPublicProjects` (which calls `GET /api/projects/public`).
+  - Provides search, technology and specialization filtering via `FilterBar`.
+  - Renders project cards `NeoCard`; clicking opens modal with full details (thumbnail, description, tech stack, functional requirements, demo/source links).
+- Student Profile (`frontend/src/pages/Profile.tsx`):
+  - Loads current profile via `GET /api/profile/me` (cookie-based auth).
+  - Updates profile via `PUT /api/profile/me`.
+- Student Dashboard (`frontend/src/pages/Dashboard.tsx`):
+  - Lists logged-in student’s projects via `GET /api/projects`.
+  - Create via `POST /api/projects` with validation (title, description ≤ 250 words, technologies[], optional fields: functional requirements[], projectType, githubUrl, deploymentUrl, imageUrl, status).
+  - Update via `PUT /api/projects/:id` and delete via `DELETE /api/projects/:id`.
+  - Thumbnail upload via `POST /api/projects/upload-thumbnail` (multipart), backend stores in Supabase Storage and returns a public URL.
+- Admin Login (`frontend/src/pages/AdminLogin.tsx`):
+  - Submits credentials to `POST /api/admin/login`; stores returned JWT in localStorage as `adminAccessToken`.
+- Admin Dashboard (`frontend/src/pages/AdminDashboard.tsx`):
+  - Verifies admin JWT via `GET /api/admin/me`. If invalid/absent, redirects to `/admin/login`.
+  - Lists students (`GET /api/admin/students`), with in-place editing of name/phone and Save to `PUT /api/admin/students/:id`.
+  - Delete student (`DELETE /api/admin/students/:id`).
+  - Load student’s projects (`GET /api/admin/students/:id/projects`).
+  - Project moderation dialog: select a project, load comments, add comment (`POST /api/admin/projects/:id/comments`), delete comment (`DELETE /api/admin/projects/:projectId/comments/:commentId`), delete project (`DELETE /api/admin/projects/:id`).
+  - Reset password (`POST /api/admin/students/:id/reset-password`).
+  - Verify email (`POST /api/admin/students/:id/verify-email`).
+
+4) Backend — Architecture and Middleware
+- Entry (`backend/src/index.ts`):
+  - Security: `helmet` with strict defaults and hardened directives; `hpp` to prevent parameter pollution.
+  - CORS: Whitelist support via `CORS_ORIGINS` env; otherwise mirror origin for initial deploy. Credentials enabled.
+  - Rate limiting: Global limiter (800 req / 15 mins). Per-route limiters on auth/admin routes.
+  - JSON parser with 200kb limit; `cookie-parser` for httpOnly cookie handling.
+  - Health endpoints: `/` and `/health`.
+  - Mounts routers:
+    - `/api/auth` → `routes/auth.ts`
+    - `/api/admin` → `routes/admin.ts`
+    - `/api/projects` → `routes/projects.ts`
+    - `/api/profile` → `routes/profile.ts`
+  - Console request logger for diagnostics.
+- Supabase Clients (`backend/src/config/supabase.ts`):
+  - `adminClient` (service role key) for privileged DB operations and Storage uploads.
+  - `publicClient` (anon key) for user-facing auth actions like signup/signin/resend.
+  - `getUserClient(accessToken)` to query as the current user (RLS aware) when needed. Access token taken from httpOnly cookie.
+- Mailer (`backend/src/util/mailer.ts`):
+  - Configurable SMTP transport using `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`.
+  - `sendEmail(to, subject, text, html, replyTo)` sends emails (throws if no SMTP configured).
+  - `renderCommentHtml(...)` generates branded HTML email used to notify students about admin comments.
+
+5) Backend — Auth and Session Model
+- Student Signup (`POST /api/auth/signup`):
+  - Validations via Zod: `fullName`, `rollNumber` as `SET-XX-XXX`, `email`, `phone` as `03XXXXXXXXX`, password 8+ and matches confirm.
+  - Uniqueness checks on `profiles` for roll number and email.
+  - Creates Supabase auth user using public client; sets email verification redirect (`EMAIL_REDIRECT_URL`).
+  - Creates a `profiles` row with user id.
+- Student Signin (`POST /api/auth/signin`):
+  - Validates inputs, authenticates with Supabase password auth.
+  - If email not verified, signs out and blocks with 403.
+  - On success, sets httpOnly cookies: `accessToken` (1h) and `refreshToken` (7d). `secure: true` only in production; `sameSite: 'none'`.
+- Token Refresh (`POST /api/auth/refresh`):
+  - Accepts `refreshToken` from cookie or body, generates fresh `accessToken` and (optionally) a new `refreshToken` as cookies.
+- Logout (`POST /api/auth/logout`):
+  - Clears `accessToken` and `refreshToken` cookies.
+- Resend Verification (`POST /api/auth/resend-verification`):
+  - Triggers Supabase email verification resend for a given email.
+
+6) Backend — Profile API
+- `GET /api/profile/me` (auth required): returns current profile fields mapped into camelCase.
+- `PUT /api/profile/me` (auth required): updates `full_name`, `phone`, `profile_image_url` if present.
+- `POST /api/profile/change-password` (auth required):
+  - Validates current and new passwords.
+  - Verifies current password by attempting a fresh sign-in (via public client) then updates password via admin API.
+
+7) Backend — Projects API
+- Schema validation (`routes/projects.ts`):
+  - `title` (required);
+  - `description` (required, max ≈ 250 words via whitespace-split validation);
+  - `technologies` array required and non-empty;
+  - Optional: `functionalRequirements` (array), `projectType`, `githubUrl`, `deploymentUrl`, `imageUrl`;
+  - `status` in `completed | in-progress | planned`.
+- Endpoints:
+  - `GET /api/projects/public` (no auth):
+    - Returns mapped project list with owner profile and admin comments, newest first.
+  - `GET /api/projects` (auth required):
+    - Returns the current student’s own projects, newest first.
+  - `POST /api/projects` (auth required):
+    - Inserts a new project bound to the authenticated user id.
+  - `PUT /api/projects/:id` (auth required):
+    - Partial update; only the owner can update.
+  - `DELETE /api/projects/:id` (auth required):
+    - Owner-only delete.
+  - `POST /api/projects/upload-thumbnail` (auth required):
+    - Accepts multipart file (5MB limit).
+    - Uploads to Supabase Storage bucket (env `SUPABASE_THUMBNAILS_BUCKET`, default `thumbnails`). Returns a public URL.
+
+8) Backend — Admin API
+- JWT Model:
+  - Admin logs in via `POST /api/admin/login` with env-configured `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
+  - Server issues a JWT signed with `ADMIN_JWT_SECRET`, expires in 8h.
+  - Admin endpoints require `Authorization: Bearer <token>` header.
+- Endpoints:
+  - `GET /api/admin/me` → sanity check of token.
+  - `GET /api/admin/students` → list student profiles: `id, full_name, roll_number, email, phone, profile_image_url, created_at` (sorted desc by created_at).
+  - `PUT /api/admin/students/:id` → update name/phone/avatar URL.
+  - `DELETE /api/admin/students/:id` → deletes profile (cascades to projects).
+  - `GET /api/admin/students/:id/projects` → projects for a student with `id, title, status, created_at, project_type`.
+  - `DELETE /api/admin/projects/:id` → delete any project by id.
+  - Project comments moderation:
+    - `GET /api/admin/projects/:id/comments` → list comments for a project.
+    - `POST /api/admin/projects/:id/comments` → add comment; also sends email to project owner using `sendEmail` with HTML generated by `renderCommentHtml`.
+    - `DELETE /api/admin/projects/:projectId/comments/:commentId` → delete specific comment.
+  - Student password/email ops:
+    - `POST /api/admin/students/:id/reset-password` → set temporary new password.
+    - `POST /api/admin/students/:id/verify-email` → mark Supabase user email as verified.
+
+9) Database and Storage Model (Supabase)
+- Tables (see `backend/src/schema.sql`):
+  - `public.profiles`
+    - id (uuid, PK, references `auth.users(id)`, cascade delete)
+    - full_name, roll_number (unique), email (unique), phone, created_at
+  - `public.projects`
+    - id (uuid, PK), user_id (FK to profiles), title, description, technologies text[], project_type, github_url, deployment_url, image_url, status, created_at
+  - `public.project_comments`
+    - id (uuid, PK), project_id (FK to projects), content, created_at
+- RLS Policies (enabled):
+  - `profiles`: only owner can select their profile.
+  - `projects`: SELECT allowed to everyone; INSERT/UPDATE/DELETE allowed only by owner via auth.uid checks.
+  - `project_comments`: SELECT allowed to everyone. Inserts/updates/deletes are done by backend service role (bypasses RLS) to ensure only admins can create/delete.
+- Storage:
+  - Thumbnails uploaded by backend to the `thumbnails` bucket using service role, returning a public URL for embedding on the site.
+
+10) Security Considerations
+- HTTP hardening: `helmet` with strict defaults, `frameAncestors: 'none'`, `defaultSrc: 'none'`, `formAction: 'none'`.
+- Parameter pollution prevention: `hpp` middleware.
+- Rate limiting:
+  - Global: 800 req/15 min.
+  - Auth/Admin sensitive endpoints: stricter per-route limits (e.g., 50–60 req/10 min).
+- CORS: strict allow-list via `CORS_ORIGINS`; otherwise permissive for early integration but still sets `credentials: true` and required headers.
+- Authentication:
+  - Students authenticated via Supabase session tokens stored in httpOnly cookies (`accessToken`, `refreshToken`).
+  - Admin authenticated via stateless Bearer JWT in localStorage.
+- Input validation: All mutation endpoints validate using Zod schemas to prevent malformed data and enforce formats (roll number, phone number, password length, description word limit).
+- Authorization:
+  - Student endpoints use cookie token → `getUserClient()` to confirm user and apply owner constraints.
+  - Admin endpoints verify `ADMIN_JWT_SECRET` token.
+
+11) Environment Variables
+- Frontend (`frontend/.env`):
+  - `VITE_SITE_URL` — canonical site URL for SEO and links.
+  - `VITE_OG_IMAGE` — OG image URL.
+  - `VITE_API_BASE_URL` — backend API base (optional in dev; Vite proxy may be used).
+- Backend (`backend/.env`):
+  - `PORT` — default 4000.
+  - `SUPABASE_URL` — project URL.
+  - `SUPABASE_ANON_KEY` — public anon key (used for user client and auth flows).
+  - `SUPABASE_SERVICE_ROLE_KEY` — service role key (admin client for privileged operations).
+  - `SUPABASE_THUMBNAILS_BUCKET` — storage bucket name for thumbnails (default `thumbnails`).
+  - `EMAIL_REDIRECT_URL` — URL to which Supabase verification emails will redirect after signup.
+  - `CORS_ORIGINS` — comma-separated list of allowed origins for production.
+  - Admin auth: `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_JWT_SECRET`.
+  - Mail: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, `REPLY_TO_EMAIL`.
+  - `APP_BASE_URL` — optional link embedded in comment emails.
+
+12) Typical User Flows
+- Student Signup → Verify Email → Signin → Manage Profile → Create Projects → Upload Thumbnail → Publish
+- Public Visitor → Open Home → Browse/Filter Projects → View Project Details → (Optional) follow Demo/Source links
+- Admin → Login → Validate Token → Search Students → Edit/Delete → View Projects → Add/Remove Comments → Delete Projects → Reset Password / Verify Email
+
+13) API Contract Summary (Human-readable)
+- Auth
+  - POST `/api/auth/signup` — body: { fullName, rollNumber: "SET-YY-XXX", email, phone: "03XXXXXXXXX", password, confirmPassword }
+  - POST `/api/auth/signin` — body: { email, password }; sets cookies
+  - POST `/api/auth/refresh` — cookie or body refresh token → sets fresh cookies
+  - POST `/api/auth/logout` — clears cookies
+  - POST `/api/auth/resend-verification` — body: { email }
+- Profile (requires cookies)
+  - GET `/api/profile/me`
+  - PUT `/api/profile/me` — body: { fullName?, phone?, profileImageUrl? }
+  - POST `/api/profile/change-password` — body: { currentPassword, newPassword, confirmNewPassword }
+- Projects (requires cookies unless /public)
+  - GET `/api/projects/public`
+  - GET `/api/projects`
+  - POST `/api/projects` — body matches project schema (see section 7)
+  - PUT `/api/projects/:id` — partial update
+  - DELETE `/api/projects/:id`
+  - POST `/api/projects/upload-thumbnail` — multipart/form-data { file }
+- Admin (Bearer token via localStorage)
+  - POST `/api/admin/login` — body: { email, password } → { accessToken }
+  - GET `/api/admin/me`
+  - GET `/api/admin/students`
+  - PUT `/api/admin/students/:id`
+  - DELETE `/api/admin/students/:id`
+  - GET `/api/admin/students/:id/projects`
+  - DELETE `/api/admin/projects/:id`
+  - GET `/api/admin/projects/:id/comments`
+  - POST `/api/admin/projects/:id/comments` — body: { content }
+  - DELETE `/api/admin/projects/:projectId/comments/:commentId`
+  - POST `/api/admin/students/:id/reset-password` — body: { newPassword }
+  - POST `/api/admin/students/:id/verify-email`
+
+14) Data Validation Details
+- Roll Number: `SET-\d{2}-\d{3}` enforced at signup.
+- Phone: `03` followed by 9 digits enforced at signup/profile update.
+- Description length: ≤ 250 words in projects using whitespace splitting.
+- Status: one of `completed`, `in-progress`, `planned`.
+
+15) UI/UX Highlights
+- Consistent neumorphic design elements (`NeoNav`, `NeoCard`) and soft gradients.
+- Shadcn components for accessible dialogs, inputs, buttons.
+- Toast notifications for feedback on actions (success/error).
+- Responsive grids and modals; project cards animate in (`FadeIn`) for a polished experience.
+- Admin moderation dialog for efficient project review (comments, deletion, details) without leaving the view.
+
+16) Performance and SEO
+- Frontend built with Vite; code-splitting and fast HMR in dev.
+- SEO baseline with `index.html` and reusable `SEO` component to set title/description/OG/Twitter/canonical/JSON-LD.
+- Public list endpoint returns only useful fields mapped from DB to reduce payload surface.
+
+
+
+This document summarizes features, flows, and implementation details based on the current repository codebase. Update it whenever routes or UI behaviors change.

@@ -7,7 +7,7 @@ import AnimatedList from '@/components/AnimatedList';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string;
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || '';
 
 type Student = { id: string; full_name: string; roll_number: string; email: string; phone?: string; profile_image_url?: string | null };
 type Comment = { id: string; content: string; created_at: string };
@@ -316,16 +316,37 @@ const AdminDashboard = () => {
                   <div className="font-medium mb-1">Description</div>
                   <p className="leading-relaxed whitespace-pre-wrap">{detailProject.description}</p>
                 </div>
-                {Array.isArray(detailProject.functionalRequirements || detailProject.functional_requirements) && (detailProject.functionalRequirements || detailProject.functional_requirements).length > 0 && (
+                {detailProject.requirements ? (
                   <div>
                     <div className="font-medium mb-1">Functional Requirements</div>
-                    <ul className="list-disc pl-5 space-y-1">
-                      {(detailProject.functionalRequirements || detailProject.functional_requirements).map((fr: string, idx: number) => (
-                        <li key={`${idx}-${fr}`}>{fr}</li>
-                      ))}
-                    </ul>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-sm font-semibold mb-1">Planned</div>
+                        {detailProject.requirements.planned.length > 0 ? (
+                          <ul className="list-disc pl-5 space-y-1">
+                            {detailProject.requirements.planned.map((fr: string, idx: number) => (
+                              <li key={`planned-${idx}-${fr}`}>{fr}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="text-muted-foreground text-sm">None</div>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold mb-1">Implemented</div>
+                        {detailProject.requirements.implemented.length > 0 ? (
+                          <ul className="list-disc pl-5 space-y-1">
+                            {detailProject.requirements.implemented.map((fr: string, idx: number) => (
+                              <li key={`impl-${idx}-${fr}`}>{fr}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="text-muted-foreground text-sm">None</div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                )}
+                ) : null}
                 <div>
                   <div className="font-medium mb-1">Technologies</div>
                   <div className="flex flex-wrap gap-1">

@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Eye, EyeOff } from 'lucide-react';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string;
+const rawBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
+const API_BASE_URL = rawBase && /^https?:\/\//i.test(rawBase) ? rawBase : '';
 
 const AdminLogin = () => {
   const [email, setEmail] = useState('');

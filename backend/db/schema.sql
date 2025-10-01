@@ -80,12 +80,68 @@ end $$;
 alter table if exists public.projects
   add column if not exists functional_requirements text[] not null default '{}';
 
--- Backfill migration helper: drop obsolete columns if they exist
-alter table if exists public.projects
-  drop column if exists video_url;
+-- Project requirements (normalized) with planned/implemented status
+create table if not exists public.project_requirements (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  content text not null,
+  status text not null check (status in ('planned','implemented')) default 'planned',
+  created_at timestamptz not null default now()
+);
 
--- Ensure thumbnail support exists
-alter table if exists public.projects
-  add column if not exists image_url text;
+create index if not exists pr_project_id_idx on public.project_requirements(project_id);
+create index if not exists pr_status_idx on public.project_requirements(status);
 
+alter table public.project_requirements enable row level security;
+
+do $$ begin
+  begin
+    create policy "project_requirements_select_all" on public.project_requirements
+    for select using (true);
+  exception when duplicate_object then null; end;
+end $$;
+
+do $$ begin
+  begin
+    create policy "project_requirements_modify_owner" on public.project_requirements
+    using (
+      exists (
+        select 1 from public.projects p
+        where p.id = project_id and p.user_id = auth.uid()
+      )
+    )
+    with check (
+      exists (
+        select 1 from public.projects p
+        where p.id = project_id and p.user_id = auth.uid()
+      )
+    );
+  exception when duplicate_object then null; end;
+end $$;
+
+-- Email verification tokens (for SMTP-based verification)
+create table if not exists public.email_verification_tokens (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  email text not null,
+  token text not null unique,
+  used_at timestamptz
+);
+
+create index if not exists evt_token_idx on public.email_verification_tokens(token);
+create index if not exists evt_user_id_idx on public.email_verification_tokens(user_id);
+
+
+-- Password reset tokens (for SMTP-based password resets)
+create table if not exists public.password_reset_tokens (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  email text not null,
+  token text not null unique,
+  expires_at timestamptz not null,
+  used_at timestamptz
+);
+
+create index if not exists prt_token_idx on public.password_reset_tokens(token);
+create index if not exists prt_user_id_idx on public.password_reset_tokens(user_id);
 

@@ -4,6 +4,7 @@ export interface Project {
   description: string;
   technologies: string[];
   functionalRequirements?: string[];
+  requirements?: { planned: string[]; implemented: string[] };
   projectType?: string;
   imageUrl?: string;
   deploymentUrl?: string;
