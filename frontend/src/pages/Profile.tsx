@@ -83,7 +83,7 @@ const Profile = () => {
 
   if (!isAuthed) {
     return (
-      <div className="min-h-screen bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
+      <div className="min-h-screen bg-fixed bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
         <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
           <NeoNav />
           <div className="p-6 text-center">Please sign in</div>
@@ -93,7 +93,7 @@ const Profile = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
+    <div className="min-h-screen bg-fixed bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
         <NeoNav />
         <Card>
@@ -127,7 +127,7 @@ const Profile = () => {
                   <Input value={phone} onChange={e=>setPhone(e.target.value)} />
                 </div>
                 {/* Profile Image URL input removed per requirement */}
-                <Button onClick={()=>mut.mutate()} disabled={mut.isLoading}>Save</Button>
+                <Button onClick={()=>mut.mutate()} disabled={mut.isPending}>Save</Button>
                 <div className="h-px bg-border my-4" />
                 <h4 className="text-lg font-semibold">Change Password</h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -159,7 +159,7 @@ const Profile = () => {
                   </div>
                   </div>
                 </div>
-                <Button variant="outline" onClick={()=>passwordMut.mutate()} disabled={passwordMut.isLoading}>Update Password</Button>
+                <Button variant="outline" onClick={()=>passwordMut.mutate()} disabled={passwordMut.isPending}>Update Password</Button>
               </>
             )}
           </CardContent>

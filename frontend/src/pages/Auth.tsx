@@ -105,7 +105,7 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
+    <div className="min-h-screen bg-fixed bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
         <SEO title="Sign in / Sign up — PTUT Student Portfolio" description="Access your PTUT SET student portfolio account." robots="noindex,nofollow" />
         <NeoNav />
@@ -155,8 +155,15 @@ const Auth = () => {
                     <span className="bg-white px-2 text-muted-foreground">or</span>
                   </div>
                 </div>
-                <Button type="button" variant="outline" className="w-full" onClick={handleGoogle}>
-                  Continue with Google
+                <Button type="button" variant="outline" className="w-full gap-2 flex items-center justify-center" onClick={handleGoogle}>
+                  <img
+                    src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                    alt="Google"
+                    className="h-5 w-5"
+                    loading="eager"
+                    decoding="async"
+                  />
+                  <span>Continue with Google</span>
                 </Button>
               </form>
             ) : (
@@ -182,8 +189,15 @@ const Auth = () => {
                     <span className="bg-white px-2 text-muted-foreground">or</span>
                   </div>
                 </div>
-                <Button type="button" variant="outline" className="w-full" onClick={handleGoogle}>
-                  Continue with Google
+                <Button type="button" variant="outline" className="w-full gap-2 flex items-center justify-center" onClick={handleGoogle}>
+                  <img
+                    src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                    alt="Google"
+                    className="h-5 w-5"
+                    loading="eager"
+                    decoding="async"
+                  />
+                  <span>Continue with Google</span>
                 </Button>
               </form>
             )}

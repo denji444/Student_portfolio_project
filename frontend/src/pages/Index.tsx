@@ -14,7 +14,7 @@ import FadeIn from "@/components/FadeIn";
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
+    <div className="min-h-screen bg-fixed bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-5">
         <SEO
           title="PTUT Student Portfolio — Software Engineering Technology"

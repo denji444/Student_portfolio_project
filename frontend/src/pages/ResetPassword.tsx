@@ -65,7 +65,7 @@ const ResetPassword = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#e0f2fe_100%)]">
+    <div className="min-h-screen bg-fixed bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#e0f2fe_100%)]">
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
         <SEO title="Reset password — PTUT Student Portfolio" description="Reset your PTUT SET account password." robots="noindex,nofollow" />
         <NeoNav />

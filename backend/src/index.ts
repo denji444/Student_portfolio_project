@@ -69,7 +69,7 @@ const corsOptions: cors.CorsOptions = allowedOrigins.length > 0
       },
       credentials: true,
       allowedHeaders: ['Content-Type', 'Authorization'],
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       optionsSuccessStatus: 204,
     }
   : {
@@ -77,7 +77,7 @@ const corsOptions: cors.CorsOptions = allowedOrigins.length > 0
       origin: true,
       credentials: true,
       allowedHeaders: ['Content-Type', 'Authorization'],
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       optionsSuccessStatus: 204,
     };
 

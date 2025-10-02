@@ -39,7 +39,7 @@ const AdminLogin = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)] px-4">
+    <div className="min-h-screen bg-fixed bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)] px-4">
       <main className="max-w-4xl mx-auto py-6 space-y-6">
         <NeoNav />
         <form onSubmit={handleSubmit} className="w-full max-w-sm mx-auto space-y-3 border rounded-lg p-6 bg-card">

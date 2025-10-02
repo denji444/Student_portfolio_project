@@ -110,7 +110,7 @@ const Dashboard = () => {
 
   if (!data && !isLoading) {
     return (
-      <div className="min-h-screen bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
+      <div className="min-h-screen bg-fixed bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
         <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
           <NeoNav />
           <div className="max-w-3xl mx-auto p-6 text-center">
@@ -123,7 +123,7 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
+    <div className="min-h-screen bg-fixed bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
         <NeoNav />
         <Card>
