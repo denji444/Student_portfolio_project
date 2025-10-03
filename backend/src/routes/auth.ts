@@ -304,11 +304,13 @@ router.post('/logout', authLimiter, async (_req, res) => {
 // Google OAuth (start)
 router.get('/oauth/google', async (req, res) => {
   try {
-    const backendBase = (process.env.BACKEND_URL || `${req.protocol}://${req.get('host') || ''}`).replace(/\/$/, '');
+    // IMPORTANT: Use the FRONTEND origin for callback so cookies become first-party via the frontend proxy
+    // Frontend must proxy /api/* -> backend. If APP_URL is missing, fall back to backend origin.
+    const callbackBase = (process.env.APP_URL || process.env.EMAIL_REDIRECT_URL || process.env.BACKEND_URL || `${req.protocol}://${req.get('host') || ''}`).replace(/\/$/, '');
     // Optional post-login redirect path (frontend route)
     const redirectPath = (req.query?.redirect as string | undefined) || '/dashboard';
     // Include our redirect as a query param on the callback URL so we don't touch Supabase's state
-    const callbackUrl = `${backendBase}/api/auth/oauth/callback?redirect=${encodeURIComponent(redirectPath)}`;
+    const callbackUrl = `${callbackBase}/api/auth/oauth/callback?redirect=${encodeURIComponent(redirectPath)}`;
     const { data, error } = await publicClient.auth.signInWithOAuth({
       provider: 'google',
       options: {
