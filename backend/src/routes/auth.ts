@@ -336,33 +336,54 @@ router.get('/oauth/google', async (req, res) => {
 // Google OAuth (callback)
 router.get('/oauth/callback', async (req, res) => {
   try {
+    // eslint-disable-next-line no-console
+    console.log('[OAuth][callback] Query:', req.query);
+
     const code = (req.query?.code as string | undefined)?.trim();
     // Read our own redirect param from the callback query (set in /oauth/google)
     const redirectFromQuery = (req.query?.redirect as string | undefined) || '/dashboard';
-    if (!code) return res.status(400).send('Missing code');
+    if (!code) {
+      // eslint-disable-next-line no-console
+      console.error('[OAuth][callback] Missing code');
+      return res.status(400).send('Missing code');
+    }
 
     const { data, error } = await publicClient.auth.exchangeCodeForSession(code as any);
-    if (error || !data?.session) return res.status(401).send('OAuth exchange failed');
+    if (error || !data?.session) {
+      // eslint-disable-next-line no-console
+      console.error('[OAuth][callback] exchangeCodeForSession failed:', error?.message, 'data?', !!data);
+      return res.status(401).send('OAuth exchange failed');
+    }
 
     const { access_token, refresh_token, user } = data.session;
+    // eslint-disable-next-line no-console
+    console.log('[OAuth][callback] Session obtained. User ID:', user?.id, 'Has refresh:', !!refresh_token);
+
     const isProd = process.env.NODE_ENV === 'production';
     const sameSite: 'lax' | 'none' = isProd ? 'none' : 'lax';
 
-    res.cookie('accessToken', access_token, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite,
-      maxAge: 1000 * 60 * 60, // 1h
-      path: '/',
-    });
-    if (refresh_token) {
-      res.cookie('refreshToken', refresh_token, {
+    try {
+      res.cookie('accessToken', access_token, {
         httpOnly: true,
         secure: isProd,
         sameSite,
-        maxAge: 1000 * 60 * 60 * 24 * 7, // 7d
+        maxAge: 1000 * 60 * 60, // 1h
         path: '/',
       });
+      if (refresh_token) {
+        res.cookie('refreshToken', refresh_token, {
+          httpOnly: true,
+          secure: isProd,
+          sameSite,
+          maxAge: 1000 * 60 * 60 * 24 * 7, // 7d
+          path: '/',
+        });
+      }
+      // eslint-disable-next-line no-console
+      console.log('[OAuth][callback] Cookies set. sameSite=', sameSite, 'secure=', isProd);
+    } catch (cookieErr: any) {
+      // eslint-disable-next-line no-console
+      console.error('[OAuth][callback] Failed to set cookies:', cookieErr?.message);
     }
 
     // Ensure profile exists (upsert) with logging
@@ -376,7 +397,7 @@ router.get('/oauth/callback', async (req, res) => {
         .maybeSingle();
       if (selErr) {
         // eslint-disable-next-line no-console
-        console.error('[OAuth] Failed to check existing profile:', selErr.message);
+        console.error('[OAuth][callback] Failed to check existing profile:', selErr.message);
       }
       if (!existing) {
         const { error: insErr } = await adminClient
@@ -388,19 +409,26 @@ router.get('/oauth/callback', async (req, res) => {
           });
         if (insErr) {
           // eslint-disable-next-line no-console
-          console.error('[OAuth] Failed to create profile for user', user.id, insErr.message);
+          console.error('[OAuth][callback] Failed to create profile for user', user.id, insErr.message);
         } else {
           // eslint-disable-next-line no-console
-          console.log('[OAuth] Created profile for user', user.id);
+          console.log('[OAuth][callback] Created profile for user', user.id);
         }
+      } else {
+        // eslint-disable-next-line no-console
+        console.log('[OAuth][callback] Profile exists for user', user.id);
       }
     }
 
     // Determine where to go
     const frontendBase = (process.env.APP_URL || process.env.EMAIL_REDIRECT_URL || `${req.protocol}://${req.get('host') || ''}`).replace(/\/$/, '');
     const to = `${frontendBase}${redirectFromQuery.startsWith('/') ? '' : '/'}${redirectFromQuery}`;
+    // eslint-disable-next-line no-console
+    console.log('[OAuth][callback] Redirecting to:', to);
     return res.redirect(to);
   } catch (err: any) {
+    // eslint-disable-next-line no-console
+    console.error('[OAuth][callback] Unexpected error:', err?.message);
     return res.status(500).send('Internal error');
   }
 });
