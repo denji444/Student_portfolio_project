@@ -207,15 +207,17 @@ router.post('/signup', authLimiter, async (req, res) => {
         </td></tr>
       </table>
       </body></html>`;
-    try {
-      await sendEmail(email, subject, text, html, 'noreplytostudent@gmail.com');
-      // eslint-disable-next-line no-console
-      console.log('[Signup] Verification email sent to:', email);
-    } catch (emailErr: any) {
-      // eslint-disable-next-line no-console
-      console.error('[Signup] Failed to send verification email:', emailErr?.message);
-      // Continue anyway - user is created, they can resend verification later
-    }
+    // Send email in background (non-blocking) to avoid timeout delays
+    setImmediate(async () => {
+      try {
+        await sendEmail(email, subject, text, html, 'noreplytostudent@gmail.com');
+        // eslint-disable-next-line no-console
+        console.log('[Signup] Verification email sent to:', email);
+      } catch (emailErr: any) {
+        // eslint-disable-next-line no-console
+        console.error('[Signup] Failed to send verification email:', emailErr?.message);
+      }
+    });
 
     return res.status(201).json({ message: 'Account created. Please verify your email to sign in.' });
   } catch (err: any) {
@@ -513,7 +515,17 @@ router.post('/resend-verification', authLimiter, async (req, res) => {
         </td></tr>
       </table>
       </body></html>`;
-    await sendEmail(email, subject, text, html, 'noreplytostudent@gmail.com');
+    // Send email in background to avoid blocking the response
+    setImmediate(async () => {
+      try {
+        await sendEmail(email, subject, text, html, 'noreplytostudent@gmail.com');
+        // eslint-disable-next-line no-console
+        console.log('[Resend] Verification email sent to:', email);
+      } catch (emailErr: any) {
+        // eslint-disable-next-line no-console
+        console.error('[Resend] Failed to send verification email:', emailErr?.message);
+      }
+    });
 
     return res.status(200).json({ message: 'Verification email resent' });
   } catch (err: any) {
