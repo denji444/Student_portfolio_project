@@ -13,6 +13,10 @@ import profileRoutes from './routes/profile.js';
 
 const app = express();
 
+// We are behind a proxy on Render; enable trust proxy so client IP is derived from X-Forwarded-For
+// This is required for express-rate-limit v7+ to avoid ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+app.set('trust proxy', 1);
+
 // Security headers
     const isProd = process.env.NODE_ENV === 'production';
 app.use(helmet({
