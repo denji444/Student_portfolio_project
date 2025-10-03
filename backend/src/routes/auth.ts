@@ -207,10 +207,20 @@ router.post('/signup', authLimiter, async (req, res) => {
         </td></tr>
       </table>
       </body></html>`;
-    await sendEmail(email, subject, text, html, 'noreplytostudent@gmail.com');
+    try {
+      await sendEmail(email, subject, text, html, 'noreplytostudent@gmail.com');
+      // eslint-disable-next-line no-console
+      console.log('[Signup] Verification email sent to:', email);
+    } catch (emailErr: any) {
+      // eslint-disable-next-line no-console
+      console.error('[Signup] Failed to send verification email:', emailErr?.message);
+      // Continue anyway - user is created, they can resend verification later
+    }
 
     return res.status(201).json({ message: 'Account created. Please verify your email to sign in.' });
   } catch (err: any) {
+    // eslint-disable-next-line no-console
+    console.error('[Signup] Signup failed:', err?.message);
     return res.status(500).json({ error: err.message ?? 'Internal error' });
   }
 });
