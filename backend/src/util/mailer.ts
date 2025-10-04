@@ -12,7 +12,14 @@ const DEFAULT_REPLY_TO = process.env.REPLY_TO_EMAIL || '';
 let smtpTransporter: nodemailer.Transporter | null = null;
 
 try {
+  console.log('[Mailer] Checking SMTP configuration...');
+  console.log('[Mailer] SMTP_HOST:', SMTP_HOST ? 'SET' : 'MISSING');
+  console.log('[Mailer] SMTP_USER:', SMTP_USER ? 'SET' : 'MISSING');
+  console.log('[Mailer] SMTP_PASS:', SMTP_PASS ? 'SET' : 'MISSING');
+  console.log('[Mailer] SMTP_PORT:', SMTP_PORT);
+  
   if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+    console.log('[Mailer] Creating SMTP transporter...');
     smtpTransporter = nodemailer.createTransport({
       host: SMTP_HOST,
       port: SMTP_PORT,
