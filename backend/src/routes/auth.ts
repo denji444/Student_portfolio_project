@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { adminClient, publicClient } from '../config/supabase.js';
 import crypto from 'crypto';
-import { sendEmail } from '../util/mailer.js';
+import { sendEmail, sendEmailWithRetry } from '../util/mailer.js';
 
 const router = Router();
 const authLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 60 });
@@ -68,7 +68,7 @@ router.post('/password-reset/request', authLimiter, async (req, res) => {
         </td></tr>
       </table>
       </body></html>`;
-    await sendEmail(profile.email, subject, text, html, 'noreplytostudent@gmail.com');
+    await sendEmailWithRetry(profile.email, subject, text, html, 'noreplytostudent@gmail.com', 3);
     return res.json({ message: 'If an account exists, a reset email has been sent.' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message ?? 'Internal error' });
@@ -210,12 +210,12 @@ router.post('/signup', authLimiter, async (req, res) => {
     // Send email in background (non-blocking) to avoid timeout delays
     setImmediate(async () => {
       try {
-        await sendEmail(email, subject, text, html, 'noreplytostudent@gmail.com');
+        await sendEmailWithRetry(email, subject, text, html, 'noreplytostudent@gmail.com', 3);
         // eslint-disable-next-line no-console
         console.log('[Signup] Verification email sent to:', email);
       } catch (emailErr: any) {
         // eslint-disable-next-line no-console
-        console.error('[Signup] Failed to send verification email:', emailErr?.message);
+        console.error('[Signup] Failed to send verification email after retries:', emailErr?.message);
       }
     });
 
@@ -518,12 +518,12 @@ router.post('/resend-verification', authLimiter, async (req, res) => {
     // Send email in background to avoid blocking the response
     setImmediate(async () => {
       try {
-        await sendEmail(email, subject, text, html, 'noreplytostudent@gmail.com');
+        await sendEmailWithRetry(email, subject, text, html, 'noreplytostudent@gmail.com', 3);
         // eslint-disable-next-line no-console
         console.log('[Resend] Verification email sent to:', email);
       } catch (emailErr: any) {
         // eslint-disable-next-line no-console
-        console.error('[Resend] Failed to send verification email:', emailErr?.message);
+        console.error('[Resend] Failed to send verification email after retries:', emailErr?.message);
       }
     });
 

@@ -130,9 +130,38 @@ app.use((req, _res, next) => {
   next();
 });
 
-app.listen(port, host, () => {
+// Add request timeout middleware (60 seconds)
+app.use((req, res, next) => {
+  res.setTimeout(60000, () => {
+    console.error(`[Timeout] Request timeout for ${req.method} ${req.originalUrl}`);
+    if (!res.headersSent) {
+      res.status(408).json({ error: 'Request timeout' });
+    }
+  });
+  next();
+});
+
+const server = app.listen(port, host, () => {
   // eslint-disable-next-line no-console
   console.log(`Backend listening on http://${host}:${port} (PORT env=${process.env.PORT || 'undefined'})`);
+});
+
+// Set server timeout (70 seconds to be higher than request timeout)
+server.timeout = 70000;
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    console.log('Process terminated');
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully');
+  server.close(() => {
+    console.log('Process terminated');
+  });
 });
 
 

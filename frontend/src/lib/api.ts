@@ -86,15 +86,37 @@ export async function signup(payload: {
   confirmPassword: string;
 }): Promise<{ message: string }>
 {
-  const res = await fetch(`${API_BASE_URL}/api/auth/signup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-    credentials: 'include',
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || 'Signup failed');
-  return json;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+  
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      credentials: 'include',
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    
+    const json = await res.json();
+    if (!res.ok) {
+      if (res.status === 408) {
+        throw new Error('Request timeout. Please try again.');
+      } else if (res.status >= 500) {
+        throw new Error('Server error. Please try again in a few moments.');
+      } else {
+        throw new Error(json?.error || 'Signup failed');
+      }
+    }
+    return json;
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('Request timeout. Please check your connection and try again.');
+    }
+    throw error;
+  }
 }
 
 export async function signin(payload: { email: string; password: string }): Promise<{ message: string }>
@@ -112,14 +134,37 @@ export async function signin(payload: { email: string; password: string }): Prom
 
 export async function resendVerification(payload: { email: string }): Promise<{ message: string }>
 {
-  const res = await fetch(`${API_BASE_URL}/api/auth/resend-verification`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || 'Failed to resend verification email');
-  return json;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+  
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/resend-verification`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    
+    const json = await res.json();
+    if (!res.ok) {
+      // Provide better error messages for common issues
+      if (res.status === 408) {
+        throw new Error('Request timeout. The email service may be temporarily unavailable. Please try again.');
+      } else if (res.status >= 500) {
+        throw new Error('Server error. Please try again in a few moments.');
+      } else {
+        throw new Error(json?.error || 'Failed to resend verification email');
+      }
+    }
+    return json;
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('Request timeout. Please check your connection and try again.');
+    }
+    throw error;
+  }
 }
 
 export async function requestPasswordReset(payload: { email: string }): Promise<{ message: string }>

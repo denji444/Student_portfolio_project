@@ -5,6 +5,7 @@ const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
 const SMTP_USER = process.env.SMTP_USER || '';
 const SMTP_PASS = process.env.SMTP_PASS || '';
 const MAIL_FROM = process.env.MAIL_FROM || SMTP_USER || 'no-reply@example.com';
+const EMAIL_TIMEOUT = Number(process.env.EMAIL_TIMEOUT || 30000); // 30 seconds default
 
 const DEFAULT_REPLY_TO = process.env.REPLY_TO_EMAIL || '';
 
@@ -17,18 +18,112 @@ try {
       port: SMTP_PORT,
       secure: SMTP_PORT === 465,
       auth: { user: SMTP_USER, pass: SMTP_PASS },
+      // Add timeout configurations
+      connectionTimeout: EMAIL_TIMEOUT, // Connection timeout
+      greetingTimeout: EMAIL_TIMEOUT, // Time to wait for greeting after connection is established
+      socketTimeout: EMAIL_TIMEOUT, // Inactivity timeout
+      // Connection pooling to reuse connections
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
+      // Retry configuration
+      tls: {
+        rejectUnauthorized: process.env.NODE_ENV === 'production'
+      }
     });
+    
+    // Verify connection configuration on startup
+    smtpTransporter.verify((error, success) => {
+      if (error) {
+        console.error('[Mailer] SMTP verification failed:', error.message);
+        smtpTransporter = null;
+      } else {
+        console.log('[Mailer] SMTP server is ready to take our messages');
+      }
+    });
+  } else {
+    console.warn('[Mailer] SMTP configuration incomplete. Email sending will be disabled.');
   }
-} catch {
+} catch (error: any) {
+  console.error('[Mailer] Failed to create SMTP transporter:', error.message);
   smtpTransporter = null;
 }
 
 export async function sendEmail(to: string, subject: string, text: string, html?: string, replyTo?: string) {
-  if (smtpTransporter) {
-    await smtpTransporter.sendMail({ from: MAIL_FROM, to, subject, text, html, replyTo: replyTo || DEFAULT_REPLY_TO || undefined });
-    return;
+  if (!smtpTransporter) {
+    throw new Error('No email provider configured');
   }
-  throw new Error('No email provider configured');
+
+  const mailOptions = {
+    from: MAIL_FROM,
+    to,
+    subject,
+    text,
+    html,
+    replyTo: replyTo || DEFAULT_REPLY_TO || undefined
+  };
+
+  try {
+    // Create a promise with timeout
+    const sendPromise = smtpTransporter.sendMail(mailOptions);
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Email sending timeout')), EMAIL_TIMEOUT);
+    });
+
+    // Race between sending and timeout
+    const result = await Promise.race([sendPromise, timeoutPromise]);
+    console.log('[Mailer] Email sent successfully to:', to);
+    return result;
+  } catch (error: any) {
+    console.error('[Mailer] Failed to send email to:', to, 'Error:', error.message);
+    
+    // Provide more specific error messages
+    if (error.message.includes('timeout') || error.code === 'ETIMEDOUT') {
+      throw new Error('Email service timeout. Please try again later.');
+    } else if (error.code === 'ECONNREFUSED') {
+      throw new Error('Unable to connect to email server. Please try again later.');
+    } else if (error.code === 'EAUTH') {
+      throw new Error('Email authentication failed. Please contact support.');
+    } else {
+      throw new Error(`Email sending failed: ${error.message}`);
+    }
+  }
+}
+
+// Add a function to send emails with retry logic
+export async function sendEmailWithRetry(to: string, subject: string, text: string, html?: string, replyTo?: string, maxRetries: number = 3) {
+  let lastError: Error;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await sendEmail(to, subject, text, html, replyTo);
+      return; // Success, exit the function
+    } catch (error: any) {
+      lastError = error;
+      console.warn(`[Mailer] Attempt ${attempt}/${maxRetries} failed:`, error.message);
+      
+      // Don't retry on authentication errors
+      if (error.code === 'EAUTH') {
+        throw error;
+      }
+      
+      // Wait before retrying (exponential backoff)
+      if (attempt < maxRetries) {
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // Max 10 seconds
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError!;
+}
+
+// Add graceful shutdown for connection pool
+export function closeMailer() {
+  if (smtpTransporter) {
+    smtpTransporter.close();
+    console.log('[Mailer] Connection pool closed');
+  }
 }
 
 export const renderCommentHtml = (params: { studentName: string; projectTitle: string; comment: string; projectId: string; appUrl?: string }) => {
