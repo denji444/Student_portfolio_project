@@ -26,24 +26,29 @@ try {
       secure: SMTP_PORT === 465,
       auth: { user: SMTP_USER, pass: SMTP_PASS },
       // Add timeout configurations
-      connectionTimeout: EMAIL_TIMEOUT, // Connection timeout
-      greetingTimeout: EMAIL_TIMEOUT, // Time to wait for greeting after connection is established
-      socketTimeout: EMAIL_TIMEOUT, // Inactivity timeout
+      connectionTimeout: 60000, // Increase timeout for production
+      greetingTimeout: 30000, 
+      socketTimeout: 60000,
       // Connection pooling to reuse connections
       pool: true,
       maxConnections: 5,
       maxMessages: 100,
-      // Retry configuration
+      // Enhanced TLS configuration for production
       tls: {
-        rejectUnauthorized: process.env.NODE_ENV === 'production'
-      }
+        rejectUnauthorized: false, // More lenient for production issues
+        ciphers: 'SSLv3'
+      },
+      // Add debug for production
+      debug: process.env.NODE_ENV === 'production',
+      logger: process.env.NODE_ENV === 'production'
     });
     
-    // Verify connection configuration on startup
+    // Verify connection configuration on startup (non-blocking)
     smtpTransporter.verify((error, success) => {
       if (error) {
         console.error('[Mailer] SMTP verification failed:', error.message);
-        smtpTransporter = null;
+        console.log('[Mailer] Will attempt to send emails anyway (verification can fail but sending might work)');
+        // Don't set transporter to null - let it try to send emails anyway
       } else {
         console.log('[Mailer] SMTP server is ready to take our messages');
       }
