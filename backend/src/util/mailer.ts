@@ -1,57 +1,97 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const MAIL_FROM = process.env.MAIL_FROM || 'onboarding@resend.dev';
+const SMTP_HOST = process.env.SMTP_HOST || '';
+const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
+const SMTP_USER = process.env.SMTP_USER || '';
+const SMTP_PASS = process.env.SMTP_PASS || '';
+const MAIL_FROM = process.env.MAIL_FROM || SMTP_USER || 'no-reply@example.com';
+const EMAIL_TIMEOUT = Number(process.env.EMAIL_TIMEOUT || 60000); // 60 seconds for production
 
-if (!RESEND_API_KEY) {
-  console.warn('[Mailer] RESEND_API_KEY is not set. Email sending will be disabled.');
-}
+let smtpTransporter: nodemailer.Transporter | null = null;
 
-const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
+try {
+  console.log('[Mailer] Checking SMTP configuration...');
+  console.log('[Mailer] SMTP_HOST:', SMTP_HOST ? 'SET' : 'MISSING');
+  console.log('[Mailer] SMTP_USER:', SMTP_USER ? 'SET' : 'MISSING');
+  console.log('[Mailer] SMTP_PASS:', SMTP_PASS ? 'SET' : 'MISSING');
+  console.log('[Mailer] SMTP_PORT:', SMTP_PORT);
 
-export async function sendEmail(
-  to: string,
-  subject: string,
-  text: string,
-  html?: string,
-  replyTo?: string
-) {
-  if (!resend) {
-    throw new Error('Email service not configured');
-  }
-
-  try {
-    const { data, error } = await resend.emails.send({
-      from: MAIL_FROM,
-      to,
-      subject,
-      text,
-      html,
-      reply_to: replyTo,
+  if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+    console.log('[Mailer] Creating SMTP transporter...');
+    smtpTransporter = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_PORT === 465,
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+      // Enhanced timeout configuration for production
+      connectionTimeout: EMAIL_TIMEOUT,
+      greetingTimeout: 30000,
+      socketTimeout: EMAIL_TIMEOUT,
+      // Connection pooling
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
+      // TLS configuration
+      tls: {
+        rejectUnauthorized: process.env.NODE_ENV === 'production' ? false : true,
+        ciphers: 'SSLv3'
+      }
     });
 
-    if (error) {
-      console.error('[Mailer] Resend API error:', error);
-      throw new Error('Failed to send email');
-    }
+    // Verify connection (non-blocking)
+    smtpTransporter.verify((error, success) => {
+      if (error) {
+        console.error('[Mailer] SMTP verification failed:', error.message);
+        console.log('[Mailer] Will attempt to send emails anyway');
+      } else {
+        console.log('[Mailer] SMTP server is ready to take our messages');
+      }
+    });
+  } else {
+    console.warn('[Mailer] SMTP configuration incomplete. Email sending will be disabled.');
+  }
+} catch (error: any) {
+  console.error('[Mailer] Failed to create SMTP transporter:', error.message);
+  smtpTransporter = null;
+}
 
-    console.log('[Mailer] Email sent via Resend. ID:', data?.id);
-    return data;
-  } catch (error) {
-    console.error('[Mailer] Error sending email:', error);
-    throw new Error('Failed to send email. Please try again later.');
+export async function sendEmail(to: string, subject: string, text: string, html?: string, replyTo?: string) {
+  if (!smtpTransporter) {
+    throw new Error('No email provider configured');
+  }
+
+  const mailOptions = {
+    from: MAIL_FROM,
+    to,
+    subject,
+    text,
+    html,
+    replyTo: replyTo || process.env.REPLY_TO_EMAIL || undefined
+  };
+
+  try {
+    // Send without artificial timeout - let nodemailer handle its own timeouts
+    const result = await smtpTransporter.sendMail(mailOptions);
+    console.log('[Mailer] Email sent successfully to:', to);
+    return result;
+  } catch (error: any) {
+    console.error('[Mailer] Failed to send email to:', to, 'Error:', error.message);
+
+    // Provide better error messages
+    if (error.message.includes('timeout') || error.code === 'ETIMEDOUT') {
+      throw new Error('Email service timeout. Please try again later.');
+    } else if (error.code === 'ECONNREFUSED') {
+      throw new Error('Unable to connect to email server. Please try again later.');
+    } else if (error.code === 'EAUTH') {
+      throw new Error('Email authentication failed. Please contact support.');
+    } else {
+      throw new Error(`Email sending failed: ${error.message}`);
+    }
   }
 }
 
 // Keep the retry logic but update it to use the new sendEmail
-export async function sendEmailWithRetry(
-  to: string,
-  subject: string,
-  text: string,
-  html?: string,
-  replyTo?: string,
-  maxRetries = 3
-) {
+export async function sendEmailWithRetry(to: string, subject: string, text: string, html?: string, replyTo?: string, maxRetries = 3) {
   let lastError: Error = new Error('Unknown error');
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -69,13 +109,17 @@ export async function sendEmailWithRetry(
       }
     }
   }
-  throw lastError!;
+
+  console.error(`[Mailer] Failed after ${maxRetries} attempts:`, lastError.message);
+  throw lastError;
 }
 
 // Add graceful shutdown for connection pool
 export function closeMailer() {
-  // Resend doesn't need explicit cleanup
-  console.log('[Mailer] Resend service ready');
+  if (smtpTransporter) {
+    smtpTransporter.close();
+    console.log('[Mailer] Connection pool closed');
+  }
 }
 
 export const renderCommentHtml = (params: { studentName: string; projectTitle: string; comment: string; projectId: string; appUrl?: string }) => {
