@@ -1,141 +1,81 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
-const SMTP_HOST = process.env.SMTP_HOST || '';
-const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
-const SMTP_USER = process.env.SMTP_USER || '';
-const SMTP_PASS = process.env.SMTP_PASS || '';
-const MAIL_FROM = process.env.MAIL_FROM || SMTP_USER || 'no-reply@example.com';
-const EMAIL_TIMEOUT = Number(process.env.EMAIL_TIMEOUT || 30000); // 30 seconds default
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const MAIL_FROM = process.env.MAIL_FROM || 'onboarding@resend.dev';
 
-const DEFAULT_REPLY_TO = process.env.REPLY_TO_EMAIL || '';
-
-let smtpTransporter: nodemailer.Transporter | null = null;
-
-try {
-  console.log('[Mailer] Checking SMTP configuration...');
-  console.log('[Mailer] SMTP_HOST:', SMTP_HOST ? 'SET' : 'MISSING');
-  console.log('[Mailer] SMTP_USER:', SMTP_USER ? 'SET' : 'MISSING');
-  console.log('[Mailer] SMTP_PASS:', SMTP_PASS ? 'SET' : 'MISSING');
-  console.log('[Mailer] SMTP_PORT:', SMTP_PORT);
-  
-  if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
-    console.log('[Mailer] Creating SMTP transporter...');
-    smtpTransporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_PORT === 465,
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-      // Add timeout configurations
-      connectionTimeout: 60000, // Increase timeout for production
-      greetingTimeout: 30000, 
-      socketTimeout: 60000,
-      // Connection pooling to reuse connections
-      pool: true,
-      maxConnections: 5,
-      maxMessages: 100,
-      // Enhanced TLS configuration for production
-      tls: {
-        rejectUnauthorized: false, // More lenient for production issues
-        ciphers: 'SSLv3'
-      },
-      // Add debug for production
-      debug: process.env.NODE_ENV === 'production',
-      logger: process.env.NODE_ENV === 'production'
-    });
-    
-    // Verify connection configuration on startup (non-blocking)
-    smtpTransporter.verify((error, success) => {
-      if (error) {
-        console.error('[Mailer] SMTP verification failed:', error.message);
-        console.log('[Mailer] Will attempt to send emails anyway (verification can fail but sending might work)');
-        // Don't set transporter to null - let it try to send emails anyway
-      } else {
-        console.log('[Mailer] SMTP server is ready to take our messages');
-      }
-    });
-  } else {
-    console.warn('[Mailer] SMTP configuration incomplete. Email sending will be disabled.');
-  }
-} catch (error: any) {
-  console.error('[Mailer] Failed to create SMTP transporter:', error.message);
-  smtpTransporter = null;
+if (!RESEND_API_KEY) {
+  console.warn('[Mailer] RESEND_API_KEY is not set. Email sending will be disabled.');
 }
 
-export async function sendEmail(to: string, subject: string, text: string, html?: string, replyTo?: string) {
-  if (!smtpTransporter) {
-    throw new Error('No email provider configured');
-  }
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
-  const mailOptions = {
-    from: MAIL_FROM,
-    to,
-    subject,
-    text,
-    html,
-    replyTo: replyTo || DEFAULT_REPLY_TO || undefined
-  };
+export async function sendEmail(
+  to: string,
+  subject: string,
+  text: string,
+  html?: string,
+  replyTo?: string
+) {
+  if (!resend) {
+    throw new Error('Email service not configured');
+  }
 
   try {
-    // Create a promise with timeout
-    const sendPromise = smtpTransporter.sendMail(mailOptions);
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Email sending timeout')), EMAIL_TIMEOUT);
+    const { data, error } = await resend.emails.send({
+      from: MAIL_FROM,
+      to,
+      subject,
+      text,
+      html,
+      reply_to: replyTo,
     });
 
-    // Race between sending and timeout
-    const result = await Promise.race([sendPromise, timeoutPromise]);
-    console.log('[Mailer] Email sent successfully to:', to);
-    return result;
-  } catch (error: any) {
-    console.error('[Mailer] Failed to send email to:', to, 'Error:', error.message);
-    
-    // Provide more specific error messages
-    if (error.message.includes('timeout') || error.code === 'ETIMEDOUT') {
-      throw new Error('Email service timeout. Please try again later.');
-    } else if (error.code === 'ECONNREFUSED') {
-      throw new Error('Unable to connect to email server. Please try again later.');
-    } else if (error.code === 'EAUTH') {
-      throw new Error('Email authentication failed. Please contact support.');
-    } else {
-      throw new Error(`Email sending failed: ${error.message}`);
+    if (error) {
+      console.error('[Mailer] Resend API error:', error);
+      throw new Error('Failed to send email');
     }
+
+    console.log('[Mailer] Email sent via Resend. ID:', data?.id);
+    return data;
+  } catch (error) {
+    console.error('[Mailer] Error sending email:', error);
+    throw new Error('Failed to send email. Please try again later.');
   }
 }
 
-// Add a function to send emails with retry logic
-export async function sendEmailWithRetry(to: string, subject: string, text: string, html?: string, replyTo?: string, maxRetries: number = 3) {
-  let lastError: Error;
-  
+// Keep the retry logic but update it to use the new sendEmail
+export async function sendEmailWithRetry(
+  to: string,
+  subject: string,
+  text: string,
+  html?: string,
+  replyTo?: string,
+  maxRetries = 3
+) {
+  let lastError: Error = new Error('Unknown error');
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      console.log(`[Mailer] Sending email (attempt ${attempt}/${maxRetries})`);
       await sendEmail(to, subject, text, html, replyTo);
-      return; // Success, exit the function
+      return; // Success
     } catch (error: any) {
       lastError = error;
-      console.warn(`[Mailer] Attempt ${attempt}/${maxRetries} failed:`, error.message);
-      
-      // Don't retry on authentication errors
-      if (error.code === 'EAUTH') {
-        throw error;
-      }
-      
-      // Wait before retrying (exponential backoff)
       if (attempt < maxRetries) {
-        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // Max 10 seconds
+        // Exponential backoff: 1s, 2s, 4s, etc.
+        const delay = Math.pow(2, attempt - 1) * 1000;
+        console.log(`[Mailer] Attempt ${attempt} failed. Retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
   }
-  
   throw lastError!;
 }
 
 // Add graceful shutdown for connection pool
 export function closeMailer() {
-  if (smtpTransporter) {
-    smtpTransporter.close();
-    console.log('[Mailer] Connection pool closed');
-  }
+  // Resend doesn't need explicit cleanup
+  console.log('[Mailer] Resend service ready');
 }
 
 export const renderCommentHtml = (params: { studentName: string; projectTitle: string; comment: string; projectId: string; appUrl?: string }) => {
