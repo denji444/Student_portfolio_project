@@ -1,4 +1,11 @@
 import 'dotenv/config';
+
+// Debug: Log environment loading
+console.log('[ENV] NODE_ENV:', process.env.NODE_ENV);
+console.log('[ENV] SMTP variables check:');
+console.log('  SMTP_HOST exists:', !!process.env.SMTP_HOST);
+console.log('  SMTP_USER exists:', !!process.env.SMTP_USER);
+console.log('  SMTP_PASS exists:', !!process.env.SMTP_PASS);
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
