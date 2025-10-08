@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { google } from 'googleapis';
+import { OAuth2Client } from 'google-auth-library';
 
 const SMTP_HOST = process.env.SMTP_HOST || '';
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
@@ -19,7 +20,7 @@ const GMAIL_REDIRECT_URI = process.env.GMAIL_REDIRECT_URI || '';
 const GMAIL_SENDER = process.env.GMAIL_SENDER || MAIL_FROM;
 
 let smtpTransporter: nodemailer.Transporter | null = null;
-let gmailOAuthClient: ReturnType<typeof google.auth.OAuth2> | null = null;
+let gmailOAuthClient: OAuth2Client | null = null;
 
 try {
   console.log('[Mailer] Email provider:', EMAIL_PROVIDER);
