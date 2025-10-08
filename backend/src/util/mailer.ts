@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { google } from 'googleapis';
 
 const SMTP_HOST = process.env.SMTP_HOST || '';
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
@@ -7,16 +8,45 @@ const SMTP_PASS = process.env.SMTP_PASS || '';
 const MAIL_FROM = process.env.MAIL_FROM || SMTP_USER || 'no-reply@example.com';
 const EMAIL_TIMEOUT = Number(process.env.EMAIL_TIMEOUT || 60000); // 60 seconds for production
 
+// Provider selection
+const EMAIL_PROVIDER = (process.env.EMAIL_PROVIDER || 'smtp').toLowerCase();
+
+// Gmail API OAuth envs
+const GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID || '';
+const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET || '';
+const GMAIL_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN || '';
+const GMAIL_REDIRECT_URI = process.env.GMAIL_REDIRECT_URI || '';
+const GMAIL_SENDER = process.env.GMAIL_SENDER || MAIL_FROM;
+
 let smtpTransporter: nodemailer.Transporter | null = null;
+let gmailOAuthClient: ReturnType<typeof google.auth.OAuth2> | null = null;
 
 try {
-  console.log('[Mailer] Checking SMTP configuration...');
-  console.log('[Mailer] SMTP_HOST:', SMTP_HOST ? 'SET' : 'MISSING');
-  console.log('[Mailer] SMTP_USER:', SMTP_USER ? 'SET' : 'MISSING');
-  console.log('[Mailer] SMTP_PASS:', SMTP_PASS ? 'SET' : 'MISSING');
-  console.log('[Mailer] SMTP_PORT:', SMTP_PORT);
+  console.log('[Mailer] Email provider:', EMAIL_PROVIDER);
+  if (EMAIL_PROVIDER === 'gmail_api') {
+    console.log('[Mailer] Checking Gmail API env configuration...');
+    console.log('[Mailer] GMAIL_CLIENT_ID:', GMAIL_CLIENT_ID ? 'SET' : 'MISSING');
+    console.log('[Mailer] GMAIL_CLIENT_SECRET:', GMAIL_CLIENT_SECRET ? 'SET' : 'MISSING');
+    console.log('[Mailer] GMAIL_REFRESH_TOKEN:', GMAIL_REFRESH_TOKEN ? 'SET' : 'MISSING');
+    console.log('[Mailer] GMAIL_REDIRECT_URI:', GMAIL_REDIRECT_URI ? 'SET' : 'MISSING');
+  } else {
+    console.log('[Mailer] Checking SMTP configuration...');
+    console.log('[Mailer] SMTP_HOST:', SMTP_HOST ? 'SET' : 'MISSING');
+    console.log('[Mailer] SMTP_USER:', SMTP_USER ? 'SET' : 'MISSING');
+    console.log('[Mailer] SMTP_PASS:', SMTP_PASS ? 'SET' : 'MISSING');
+    console.log('[Mailer] SMTP_PORT:', SMTP_PORT);
+  }
 
-  if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+  if (EMAIL_PROVIDER === 'gmail_api') {
+    if (GMAIL_CLIENT_ID && GMAIL_CLIENT_SECRET && GMAIL_REFRESH_TOKEN && GMAIL_REDIRECT_URI) {
+      console.log('[Mailer] Initializing Gmail OAuth2 client...');
+      gmailOAuthClient = new google.auth.OAuth2(GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REDIRECT_URI);
+      gmailOAuthClient.setCredentials({ refresh_token: GMAIL_REFRESH_TOKEN });
+      console.log('[Mailer] Gmail API ready. Emails will be sent via Gmail API.');
+    } else {
+      console.warn('[Mailer] Gmail API envs incomplete. Email sending will be disabled.');
+    }
+  } else if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
     console.log('[Mailer] Creating SMTP transporter...');
     smtpTransporter = nodemailer.createTransport({
       host: SMTP_HOST,
@@ -56,9 +86,52 @@ try {
 }
 
 export async function sendEmail(to: string, subject: string, text: string, html?: string, replyTo?: string) {
-  if (!smtpTransporter) {
-    throw new Error('No email provider configured');
+  if (EMAIL_PROVIDER === 'gmail_api') {
+    if (!gmailOAuthClient) throw new Error('No email provider configured');
+
+    try {
+      // Acquire access token using refresh token
+      const { token } = await gmailOAuthClient.getAccessToken();
+      if (!token) throw new Error('Failed to acquire Gmail access token');
+
+      const gmail = google.gmail({ version: 'v1', auth: gmailOAuthClient });
+
+      // Build raw RFC822 message
+      const from = GMAIL_SENDER || MAIL_FROM;
+      const headers = [
+        `From: ${from}`,
+        `To: ${to}`,
+        `Subject: ${subject}`,
+        'MIME-Version: 1.0',
+        html ? 'Content-Type: text/html; charset="UTF-8"' : 'Content-Type: text/plain; charset="UTF-8"',
+        replyTo ? `Reply-To: ${replyTo}` : undefined,
+      ].filter(Boolean).join('\r\n');
+
+      const body = html || text || '';
+      const rawMessage = Buffer.from(`${headers}\r\n\r\n${body}`)
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+
+      await gmail.users.messages.send({
+        userId: 'me',
+        requestBody: { raw: rawMessage },
+      });
+
+      console.log('[Mailer] Email sent successfully to:', to, '(Gmail API)');
+      return { accepted: [to], provider: 'gmail_api' } as any;
+    } catch (error: any) {
+      console.error('[Mailer] Gmail API send failed for', to, 'Error:', error.message);
+      if (error.message?.includes('invalid_grant')) {
+        throw new Error('Gmail token invalid or expired. Re-authorize to get a new refresh token.');
+      }
+      throw new Error(`Email sending failed: ${error.message}`);
+    }
   }
+
+  // SMTP path
+  if (!smtpTransporter) throw new Error('No email provider configured');
 
   const mailOptions = {
     from: MAIL_FROM,

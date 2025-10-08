@@ -18,5 +18,11 @@
     "@types/multer": "^2.0.0",
     "@types/nodemailer": "^7.0.1",
     "concurrently": "^9.1.2"
+  },
+  "dependencies": {
+    "google-auth-library": "^10.4.0",
+    "googleapis": "^161.0.0",
+    "open": "^10.2.0",
+    "server-destroy": "^1.0.1"
   }
 }
