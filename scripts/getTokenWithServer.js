@@ -7,12 +7,17 @@ const destroyer = require('server-destroy');
 // Gmail send-only scope
 const SCOPES = ['https://www.googleapis.com/auth/gmail.send'];
 
-// Read OAuth creds from environment, fallback to existing values if provided
-const CLIENT_ID = process.env.GMAIL_CLIENT_ID || '639493630511-u79b0lm4fhip0h44tobr8ldmmdqob1o6.apps.googleusercontent.com';
-const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET || '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';
+// Read OAuth creds strictly from environment
+const CLIENT_ID = process.env.GMAIL_CLIENT_ID;
+const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
+const REDIRECT_URI = process.env.GMAIL_REDIRECT_URI;
 
-// Use a dedicated port 8888 to avoid conflicts with Vite (8080) and backend (4000)
-const REDIRECT_URI = process.env.GMAIL_REDIRECT_URI || 'http://localhost:8888/oauth2callback';
+if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
+  console.error('Missing required environment variables. Please set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REDIRECT_URI.');
+  process.exit(1);
+}
+
+// Use a dedicated port derived from REDIRECT_URI (avoid conflicts with Vite 8080 and backend 4000)
 const LOCAL_PORT = (() => {
   try { return Number(new URL(REDIRECT_URI).port) || 80; } catch { return 8888; }
 })();
