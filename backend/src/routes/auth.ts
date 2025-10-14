@@ -110,7 +110,7 @@ const signupSchema = z.object({
   rollNumber: z.string().regex(/^SET-\d{2}-\d{3}$/),
   email: z.string().email(),
   phone: z.string().regex(/^03\d{9}$/),
-  password: z.string().min(8),
+  password: z.string().regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/,'Password must be at least 8 characters and include uppercase, lowercase, number, and special character'),
   confirmPassword: z.string().min(8),
 }).refine((d) => d.password === d.confirmPassword, {
   path: ['confirmPassword'],

@@ -20,7 +20,7 @@ const signupSchema = z.object({
   rollNumber: z.string().regex(/^SET-\d{2}-\d{3}$/,'Format: SET-23-001'),
   email: z.string().email('Invalid email'),
   phone: z.string().regex(/^03\d{9}$/,'Format: 03XXXXXXXXX'),
-  password: z.string().min(8,'Min 8 chars'),
+  password: z.string().regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/,'Password must be at least 8 characters and include uppercase, lowercase, number, and special character'),
   confirmPassword: z.string().min(8,'Min 8 chars'),
 }).refine(d => d.password === d.confirmPassword, { path: ['confirmPassword'], message: 'Passwords do not match' });
 
@@ -31,6 +31,17 @@ const signinSchema = z.object({
 
 type SignupForm = z.infer<typeof signupSchema>;
 type SigninForm = z.infer<typeof signinSchema>;
+
+function passwordStrength(p: string): { score: number; label: string } {
+  const lengthOk = p.length >= 8;
+  const hasLower = /[a-z]/.test(p);
+  const hasUpper = /[A-Z]/.test(p);
+  const hasNumber = /\d/.test(p);
+  const hasSpecial = /[^A-Za-z0-9]/.test(p);
+  const score = [lengthOk, hasLower, hasUpper, hasNumber, hasSpecial].filter(Boolean).length;
+  const label = score <= 2 ? 'Weak' : score === 3 || score === 4 ? 'Medium' : 'Strong';
+  return { score, label };
+}
 
 const Field = ({label, required=false, children}:{label:string;required?:boolean;children:any}) => (
   <div className="space-y-1">
@@ -50,6 +61,8 @@ const Auth = () => {
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [showSignupConfirm, setShowSignupConfirm] = useState(false);
   const [showSigninPassword, setShowSigninPassword] = useState(false);
+  const pw = signupForm.password;
+  const { score: pwScore, label: pwLabel } = passwordStrength(pw);
 
   const signupMutation = useMutation<{ message: string }, Error, SignupInput>({
     mutationFn: signup,
@@ -138,6 +151,18 @@ const Auth = () => {
                     <button type="button" className="absolute inset-y-0 right-0 px-3 text-muted-foreground" onClick={()=>setShowSignupPassword(v=>!v)} aria-label={showSignupPassword ? 'Hide password' : 'Show password'}>
                       {showSignupPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
+                  </div>
+                  <div className="mt-2">
+                    <div className="h-1.5 w-full rounded bg-muted overflow-hidden">
+                      <div
+                        className="h-full transition-all"
+                        style={{
+                          width: `${Math.min(pwScore, 5) * 20}%`,
+                          backgroundColor: pwScore <= 2 ? '#ef4444' : pwScore <= 4 ? '#f59e0b' : '#22c55e',
+                        }}
+                      />
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">Strength: {pw ? pwLabel : '—'}</div>
                   </div>
                 </Field>
                 <Field label="Confirm password" required>
