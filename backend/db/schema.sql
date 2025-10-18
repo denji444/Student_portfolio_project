@@ -94,9 +94,22 @@ create index if not exists pr_status_idx on public.project_requirements(status);
 
 alter table public.project_requirements enable row level security;
 
+-- Project comments indexes (used by admin and public lists)
+create index if not exists pc_project_id_idx on public.project_comments(project_id);
+create index if not exists pc_created_at_idx on public.project_comments(created_at);
+
 do $$ begin
   begin
     create policy "project_requirements_select_all" on public.project_requirements
+    for select using (true);
+  exception when duplicate_object then null; end;
+end $$;
+
+-- Project comments are publicly visible on the home page
+alter table if exists public.project_comments enable row level security;
+do $$ begin
+  begin
+    create policy "project_comments_select_all" on public.project_comments
     for select using (true);
   exception when duplicate_object then null; end;
 end $$;

@@ -37,14 +37,26 @@ const requireAuth = (req: Request & { accessToken?: string }, res: Response, nex
   next();
 };
 
-// Public list: newest first
-router.get('/public', async (_req: Request, res: Response) => {
+// Public list: newest first (anon client, paginated, slim columns)
+router.get('/public', async (req: Request, res: Response) => {
   try {
-    const { data, error } = await adminClient
+    // Pagination params
+    const page = Math.max(parseInt(String((req as any).query.page ?? '1'), 10) || 1, 1);
+    const pageSize = Math.min(Math.max(parseInt(String((req as any).query.pageSize ?? '20'), 10) || 20, 1), 50);
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    // Use anon client and select only needed columns
+    const { data, error } = await publicClient
       .from('projects')
-      .select('*,owner:profiles(full_name,roll_number,email,profile_image_url),comments:project_comments(id,content,created_at),requirements:project_requirements(id,content,status,created_at)')
-      .order('created_at', { ascending: false });
+      .select('id,title,description,technologies,project_type,github_url,deployment_url,image_url,status,created_at,owner:profiles(full_name,roll_number,email,profile_image_url),comments:project_comments(id,content,created_at),requirements:project_requirements(id,content,status,created_at)')
+      .order('created_at', { ascending: false })
+      .range(from, to);
     if (error) throw error;
+
+    // Cache for 60s; adjust as needed
+    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+
     return res.json(
       (data ?? []).map(p => ({
         id: p.id,
@@ -57,12 +69,12 @@ router.get('/public', async (_req: Request, res: Response) => {
               implemented: (p as any).requirements.filter((r: any) => r.status === 'implemented').map((r: any) => r.content),
             }
           : { planned: [], implemented: [] },
-        githubUrl: p.github_url ?? undefined,
-        deploymentUrl: p.deployment_url ?? undefined,
-        imageUrl: p.image_url ?? undefined,
+        githubUrl: (p as any).github_url ?? undefined,
+        deploymentUrl: (p as any).deployment_url ?? undefined,
+        imageUrl: (p as any).image_url ?? undefined,
         status: p.status,
-        createdAt: p.created_at,
-        projectType: p.project_type ?? undefined,
+        createdAt: (p as any).created_at,
+        projectType: (p as any).project_type ?? undefined,
         owner: (p as any).owner,
         comments: (p as any).comments ?? [],
       }))
