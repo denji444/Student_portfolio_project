@@ -69,6 +69,51 @@ export async function fetchPublicProjects(): Promise<Project[]> {
   }));
 }
 
+// Paginated public projects fetcher to support "Load more" on the home page
+export async function fetchPublicProjectsPage(page: number = 1, pageSize: number = 20): Promise<Project[]> {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  const res = await fetch(`${API_BASE_URL}/api/projects/public?${params.toString()}`);
+  if (!res.ok) throw new Error('Failed to fetch public projects');
+  const data: any[] = await res.json();
+  const normalized: PublicProjectApi[] = data.map((p: any) => ({
+    id: p.id,
+    title: p.title,
+    description: p.description,
+    technologies: p.technologies ?? [],
+    functionalRequirements: p.functionalRequirements ?? p.functional_requirements ?? [],
+    projectType: p.projectType ?? p.project_type ?? undefined,
+    githubUrl: p.githubUrl ?? p.github_url ?? undefined,
+    deploymentUrl: p.deploymentUrl ?? p.deployment_url ?? undefined,
+    imageUrl: p.imageUrl ?? p.image_url ?? undefined,
+    videoUrl: undefined,
+    status: p.status,
+    createdAt: p.createdAt ?? p.created_at,
+    owner: p.owner ?? null,
+    comments: p.comments ?? [],
+    requirements: p.requirements ?? undefined,
+  }));
+  return normalized.map((p) => ({
+    id: p.id,
+    title: p.title,
+    description: p.description,
+    technologies: p.technologies,
+    functionalRequirements: p.functionalRequirements,
+    requirements: p.requirements,
+    projectType: p.projectType,
+    githubUrl: p.githubUrl,
+    deploymentUrl: p.deploymentUrl,
+    imageUrl: p.imageUrl,
+    videoUrl: undefined,
+    status: p.status,
+    completionDate: new Date(p.createdAt).toLocaleDateString(),
+    ownerName: p.owner?.full_name,
+    ownerRoll: p.owner?.roll_number,
+    ownerEmail: p.owner?.email,
+    ownerImageUrl: p.owner?.profile_image_url ?? null,
+    comments: p.comments,
+  }));
+}
+
 export function startGoogleOAuth(redirect: string = '/dashboard') {
   const params = new URLSearchParams();
   if (redirect) params.set('redirect', redirect);

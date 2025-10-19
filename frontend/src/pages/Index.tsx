@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { fetchPublicProjects } from "@/lib/api";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { fetchPublicProjectsPage } from "@/lib/api";
 import NeoNav from "@/components/design3/NeoNav";
 import SEO from "@/components/SEO";
 import FilterBar from "@/components/design3/FilterBar";
@@ -33,9 +33,15 @@ const Index = () => {
 };
 
 const PublicProjectsSection = () => {
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['public-projects'],
-    queryFn: fetchPublicProjects,
+  const pageSize = 12;
+  const { data, isLoading, isError, error, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteQuery({
+    queryKey: ['public-projects', pageSize],
+    queryFn: ({ pageParam = 1 }) => fetchPublicProjectsPage(pageParam, pageSize),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => {
+      if (!lastPage || lastPage.length < pageSize) return undefined;
+      return allPages.length + 1;
+    },
   });
 
   const [search, setSearch] = useState("");
@@ -46,13 +52,14 @@ const PublicProjectsSection = () => {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<any | null>(null);
 
-  const allSkills = Array.from(new Set((data || []).flatMap(p => p.technologies || []))).sort();
-  const allSpecs = Array.from(new Set((data || []).map(p => p.projectType).filter(Boolean))) as string[];
+  const flat = useMemo(() => (data?.pages || []).flatMap(p => p), [data]);
+  const allSkills = Array.from(new Set((flat || []).flatMap(p => p.technologies || []))).sort();
+  const allSpecs = Array.from(new Set((flat || []).map(p => p.projectType).filter(Boolean))) as string[];
 
   const filtered = useMemo(() => {
-    if (!data) return [] as typeof data;
+    if (!flat) return [] as typeof flat;
     const q = search.trim().toLowerCase();
-    return data.filter((p) => {
+    return flat.filter((p) => {
       const haystack = [p.title, p.projectType, p.ownerName, p.ownerRoll, ...(p.technologies || [])]
         .filter(Boolean).join(' ').toLowerCase();
       const matchesQ = !q || haystack.includes(q);
@@ -61,7 +68,7 @@ const PublicProjectsSection = () => {
       const matchesSpec = specs.length === 0 || specs.some(s => (p.projectType || '').includes(s));
       return matchesQ && matchesSkills && matchesLang && matchesSpec;
     });
-  }, [data, search, skills, languages, specs]);
+  }, [flat, search, skills, languages, specs]);
 
   
 
@@ -82,7 +89,7 @@ const PublicProjectsSection = () => {
     );
   }
 
-  if (!data || data.length === 0) {
+  if (!flat || flat.length === 0) {
     return (
       <div className="text-center py-16">
         <div className="text-6xl mb-4">🗂️</div>
@@ -112,6 +119,14 @@ const PublicProjectsSection = () => {
           <p className="text-muted-foreground">Try a different query or clear the search.</p>
         </div>
       )}
+
+      <div className="flex justify-center py-4">
+        {hasNextPage && (
+          <Button onClick={() => fetchNextPage()} disabled={isFetchingNextPage} variant="outline">
+            {isFetchingNextPage ? 'Loading...' : 'Load more'}
+          </Button>
+        )}
+      </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">

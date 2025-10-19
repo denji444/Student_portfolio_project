@@ -45,6 +45,14 @@ do $$ begin
   exception when duplicate_object then null; end;
 end $$;
 
+-- Profiles: allow public read (backend only selects minimal safe columns)
+do $$ begin
+  begin
+    create policy "profiles_select_public" on public.profiles
+    for select using (true);
+  exception when duplicate_object then null; end;
+end $$;
+
 -- Projects: anyone can read
 do $$ begin
   begin

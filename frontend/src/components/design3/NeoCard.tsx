@@ -27,7 +27,12 @@ export default function NeoCard({ project, onView }: Props) {
           )}
           <div className="font-bold truncate">{project.title}</div>
         </div>
-        <div className="text-xs text-muted-foreground truncate">{project.ownerName || project.owner?.full_name} • {project.projectType || project.project_type || ''}</div>
+        <div className="text-xs text-muted-foreground truncate">
+          {(project.ownerName || project.owner?.full_name) ?? '—'}
+          {project.ownerRoll ? ` • ${project.ownerRoll}` : (project.owner?.roll_number ? ` • ${project.owner?.roll_number}` : '')}
+          {project.ownerEmail ? ` • ${project.ownerEmail}` : (project.owner?.email ? ` • ${project.owner?.email}` : '')}
+          {` • ${project.projectType || project.project_type || ''}`}
+        </div>
         <div className="font-extrabold mt-1">{project.price || ''}</div>
         <div className="flex items-center justify-between mt-2">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
