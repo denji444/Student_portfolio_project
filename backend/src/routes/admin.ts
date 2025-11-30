@@ -7,7 +7,7 @@ import { sendEmail, renderCommentHtml } from '../util/mailer.js';
 
 const router = Router();
 // Auth and admin sensitive endpoints limiter
-const authLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 50 });
+const authLimiter = (rateLimit as any)({ windowMs: 10 * 60 * 1000, max: 50 });
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';

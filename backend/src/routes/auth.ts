@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import { sendEmail, sendEmailWithRetry } from '../util/mailer.js';
 
 const router = Router();
-const authLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 60 });
+const authLimiter = (rateLimit as any)({ windowMs: 10 * 60 * 1000, max: 60 });
 
 
 // Request password reset (send email with reset link)
@@ -36,8 +36,8 @@ router.post('/password-reset/request', authLimiter, async (req, res) => {
       .from('password_reset_tokens')
       .insert({ token, user_id: profile.id, email: profile.email, expires_at: expiresAt.toISOString() });
     if (tokErr) throw tokErr;
-
-    const frontendBase = (process.env.APP_URL || process.env.EMAIL_REDIRECT_URL || `${req.protocol}://${req.get('host') || ''}`).replace(/\/$/, '');
+    const frontendBase = (process.env.APP_URL || process.env.EMAIL_REDIRECT_URL || '').replace(/\/$/, '');
+    if (!frontendBase) throw new Error('APP_URL/EMAIL_REDIRECT_URL not configured');
     const siteBase = frontendBase.replace(/\/auth$/, '');
     const resetUrl = `${siteBase}/reset-password?token=${token}`;
 
@@ -110,7 +110,7 @@ const signupSchema = z.object({
   rollNumber: z.string().regex(/^SET-\d{2}-\d{3}$/),
   email: z.string().email(),
   phone: z.string().regex(/^03\d{9}$/),
-  password: z.string().regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/,'Password must be at least 8 characters and include uppercase, lowercase, number, and special character'),
+  password: z.string().regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/, 'Password must be at least 8 characters and include uppercase, lowercase, number, and special character'),
   confirmPassword: z.string().min(8),
 }).refine((d) => d.password === d.confirmPassword, {
   path: ['confirmPassword'],
@@ -174,13 +174,15 @@ router.post('/signup', authLimiter, async (req, res) => {
       .insert({ token, user_id: authUser.id, email, expires_at: expiresAt.toISOString() });
     if (tokErr) throw tokErr;
 
-    // Build verify link using BACKEND_URL or request origin
-    const backendBase = (process.env.BACKEND_URL || `${req.protocol}://${req.get('host') || ''}`).replace(/\/$/, '');
+    // Build verify link using BACKEND_URL
+    const backendBase = (process.env.BACKEND_URL || '').replace(/\/$/, '');
+    if (!backendBase) throw new Error('BACKEND_URL not configured');
     const verifyUrl = `${backendBase}/api/auth/verify-email?token=${token}`;
 
     const subject = 'Verify your email — PTUT Student Portfolio';
     const text = `Hello ${fullName},\n\nPlease verify your email by clicking the button below.\n\nThis link will expire in 24 hours.`;
-    const frontendBase = (process.env.APP_URL || process.env.EMAIL_REDIRECT_URL || `${req.protocol}://${req.get('host') || ''}`).replace(/\/$/, '');
+    const frontendBase = (process.env.APP_URL || process.env.EMAIL_REDIRECT_URL || '').replace(/\/$/, '');
+    if (!frontendBase) throw new Error('APP_URL/EMAIL_REDIRECT_URL not configured');
     const authUrl = frontendBase.endsWith('/auth') ? frontendBase : `${frontendBase}/auth`;
     const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f5f7fb;font-family:Inter,Segoe UI,Arial,sans-serif;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:linear-gradient(180deg,#f6f7fb 0%,#ffffff 60%,#e0f2fe 100%);padding:32px 16px;">
@@ -317,8 +319,9 @@ router.post('/logout', authLimiter, async (_req, res) => {
 router.get('/oauth/google', async (req, res) => {
   try {
     // IMPORTANT: Use the FRONTEND origin for callback so cookies become first-party via the frontend proxy
-    // Frontend must proxy /api/* -> backend. If APP_URL is missing, fall back to backend origin.
-    const callbackBase = (process.env.APP_URL || process.env.EMAIL_REDIRECT_URL || process.env.BACKEND_URL || `${req.protocol}://${req.get('host') || ''}`).replace(/\/$/, '');
+    // Frontend must proxy /api/* -> backend. Do not fall back to request host.
+    const callbackBase = (process.env.APP_URL || process.env.EMAIL_REDIRECT_URL || process.env.BACKEND_URL || '').replace(/\/$/, '');
+    if (!callbackBase) return res.status(500).json({ error: 'Missing APP_URL/EMAIL_REDIRECT_URL/BACKEND_URL' });
     // Optional post-login redirect path (frontend route)
     const redirectPath = (req.query?.redirect as string | undefined) || '/dashboard';
     // Include our redirect as a query param on the callback URL so we don't touch Supabase's state
@@ -435,7 +438,8 @@ router.get('/oauth/callback', async (req, res) => {
     }
 
     // Determine where to go
-    const frontendBase = (process.env.APP_URL || process.env.EMAIL_REDIRECT_URL || `${req.protocol}://${req.get('host') || ''}`).replace(/\/$/, '');
+    const frontendBase = (process.env.APP_URL || process.env.EMAIL_REDIRECT_URL || '').replace(/\/$/, '');
+    if (!frontendBase) return res.status(500).send('Missing APP_URL/EMAIL_REDIRECT_URL');
     const to = `${frontendBase}${redirectFromQuery.startsWith('/') ? '' : '/'}${redirectFromQuery}`;
     // eslint-disable-next-line no-console
     console.log('[OAuth][callback] Redirecting to:', to);
@@ -482,9 +486,11 @@ router.post('/resend-verification', authLimiter, async (req, res) => {
       .insert({ token, user_id: profile.id, email, expires_at: expiresAt.toISOString() });
     if (tokErr) throw tokErr;
 
-    const backendBase = (process.env.BACKEND_URL || `${req.protocol}://${req.get('host') || ''}`).replace(/\/$/, '');
+    const backendBase = (process.env.BACKEND_URL || '').replace(/\/$/, '');
+    if (!backendBase) throw new Error('BACKEND_URL not configured');
     const verifyUrl = `${backendBase}/api/auth/verify-email?token=${token}`;
-    const frontendBase2 = (process.env.APP_URL || process.env.EMAIL_REDIRECT_URL || `${req.protocol}://${req.get('host') || ''}`).replace(/\/$/, '');
+    const frontendBase2 = (process.env.APP_URL || process.env.EMAIL_REDIRECT_URL || '').replace(/\/$/, '');
+    if (!frontendBase2) throw new Error('APP_URL/EMAIL_REDIRECT_URL not configured');
     const authUrl2 = frontendBase2.endsWith('/auth') ? frontendBase2 : `${frontendBase2}/auth`;
 
     const subject = 'Verify your email — PTUT Student Portfolio';
@@ -559,7 +565,8 @@ router.get('/verify-email', async (req, res) => {
       .eq('id', rec.id);
 
     // Redirect strictly to frontend /auth
-    const frontendBase = (process.env.APP_URL || process.env.EMAIL_REDIRECT_URL || `${req.protocol}://${req.get('host') || ''}`).replace(/\/$/, '');
+    const frontendBase = (process.env.APP_URL || process.env.EMAIL_REDIRECT_URL || '').replace(/\/$/, '');
+    if (!frontendBase) return res.status(500).send('Missing APP_URL/EMAIL_REDIRECT_URL');
     const authUrl = frontendBase.endsWith('/auth') ? frontendBase : `${frontendBase}/auth`;
     return res.redirect(authUrl);
   } catch (err: any) {
