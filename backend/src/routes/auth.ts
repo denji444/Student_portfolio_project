@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import { sendEmail, sendEmailWithRetry } from '../util/mailer.js';
 
 const router = Router();
-const authLimiter = (rateLimit as any)({ windowMs: 10 * 60 * 1000, max: 60 });
+const authLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 60 });
 
 
 // Request password reset (send email with reset link)
