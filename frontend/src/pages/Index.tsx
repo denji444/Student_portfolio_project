@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { fetchPublicProjectsPage } from "@/lib/api";
 import NeoNav from "@/components/design3/NeoNav";
-import SEO from "@/components/SEO";
+
 import FilterBar from "@/components/design3/FilterBar";
 import NeoCard from "@/components/design3/NeoCard";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,15 +16,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-fixed bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-5">
-        <SEO
-          title="PTUT Student Portfolio — Software Engineering Technology"
-          description="Explore PTUT SET student portfolios, projects, technologies, and live demos."
-          keywords={[
-            'PTUT portfolio', 'Punjab Tianjin University of Technology portfolio',
-            'Software Engineering Technology portfolio', 'SET portfolio',
-            'student portfolio', 'student PTUT portfolio', 'PTUT projects', 'student projects PTUT'
-          ]}
-        />
+
         <NeoNav />
         <PublicProjectsSection />
       </main>
@@ -70,7 +62,7 @@ const PublicProjectsSection = () => {
     });
   }, [flat, search, skills, languages, specs]);
 
-  
+
 
   if (isLoading) {
     return (
@@ -108,7 +100,7 @@ const PublicProjectsSection = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {filtered.map((project, idx) => (
             <FadeIn key={project.id} delayMs={60 * (idx % 9)}>
-              <NeoCard project={project} onView={(p)=>{ setActive(p); setOpen(true); }} />
+              <NeoCard project={project} onView={(p) => { setActive(p); setOpen(true); }} />
             </FadeIn>
           ))}
         </div>
@@ -190,7 +182,7 @@ const PublicProjectsSection = () => {
               <div>
                 <div className="flex items-center gap-2 mb-1"><Code className="h-4 w-4 text-muted-foreground" /><span className="font-medium">Technologies</span></div>
                 <div className="flex flex-wrap gap-1">
-                  {(active.technologies||[]).map((t: string) => (
+                  {(active.technologies || []).map((t: string) => (
                     <Badge key={t} variant="outline">{t}</Badge>
                   ))}
                 </div>

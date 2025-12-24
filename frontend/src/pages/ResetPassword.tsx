@@ -1,5 +1,5 @@
 import NeoNav from '@/components/design3/NeoNav';
-import SEO from '@/components/SEO';
+
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -67,7 +67,7 @@ const ResetPassword = () => {
   return (
     <div className="min-h-screen bg-fixed bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#e0f2fe_100%)]">
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-        <SEO title="Reset password — PTUT Student Portfolio" description="Reset your PTUT SET account password." robots="noindex,nofollow" />
+
         <NeoNav />
         <div className="flex items-center justify-center">
           <Card className="w-full max-w-lg">
@@ -81,11 +81,11 @@ const ResetPassword = () => {
                   <div className="space-y-3">
                     <div>
                       <label className="text-sm font-medium">New password</label>
-                      <Input type="password" value={pwd} onChange={(e)=>setPwd(e.target.value)} />
+                      <Input type="password" value={pwd} onChange={(e) => setPwd(e.target.value)} />
                     </div>
                     <div>
                       <label className="text-sm font-medium">Confirm new password</label>
-                      <Input type="password" value={pwd2} onChange={(e)=>setPwd2(e.target.value)} />
+                      <Input type="password" value={pwd2} onChange={(e) => setPwd2(e.target.value)} />
                     </div>
                     <Button onClick={handleReset} disabled={submitting}>{submitting ? 'Updating…' : 'Update password'}</Button>
                   </div>
@@ -96,7 +96,7 @@ const ResetPassword = () => {
                   <div className="space-y-3">
                     <div>
                       <label className="text-sm font-medium">Email</label>
-                      <Input type="email" value={email} onChange={(e)=>setEmail(e.target.value)} />
+                      <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
                     </div>
                     <Button onClick={handleRequest} disabled={requesting}>{requesting ? 'Sending…' : 'Send reset link'}</Button>
                   </div>

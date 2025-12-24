@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { getMyProfile, updateMyProfile, startGoogleOAuth } from '@/lib/api';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import SEO from '@/components/SEO';
+
 
 export default function Onboarding() {
   const [rollNumber, setRollNumber] = useState('');
@@ -69,9 +69,9 @@ export default function Onboarding() {
   return (
     <div className="min-h-screen bg-fixed bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
       <main className="max-w-xl mx-auto px-4 py-8 space-y-6">
-        <SEO title="Onboarding — PTUT Student Portfolio" description="Complete your profile to continue." robots="noindex,nofollow" />
+
         <h1 className="text-2xl font-semibold">Complete your profile</h1>
-        
+
         <form className="space-y-4" onSubmit={onSubmit}>
           <div className="space-y-1">
             <label className="text-sm font-medium text-foreground">Roll Number (Format: SET-23-001)</label>
