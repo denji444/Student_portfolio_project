@@ -8,10 +8,14 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "strict": true,
+    "noImplicitAny": true,
     "skipLibCheck": true,
-    "sourceMap": true
+    "sourceMap": false,
+    "types": [
+      "node"
+    ]
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ]
 }
-
-

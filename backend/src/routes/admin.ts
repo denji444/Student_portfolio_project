@@ -1,9 +1,13 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
 import { adminClient } from '../config/supabase.js';
+import { sendEmail, renderCommentHtml } from '../util/mailer.js';
 
 const router = Router();
+// Auth and admin sensitive endpoints limiter
+const authLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 50 });
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';
@@ -27,7 +31,7 @@ const requireAdmin = (req: any, res: any, next: any) => {
 };
 
 // Admin login
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   const body = z.object({ email: z.string().email(), password: z.string().min(1) }).safeParse(req.body);
   if (!body.success) return res.status(400).json({ error: 'Invalid input' });
   const { email, password } = body.data;
@@ -60,6 +64,7 @@ router.get('/students', requireAdmin, async (_req, res) => {
 // Update student profile
 router.put('/students/:id', requireAdmin, async (req, res) => {
   const id = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(id)) return res.status(400).json({ error: 'Invalid id' });
   const parsed = z.object({
     fullName: z.string().min(1).optional(),
     phone: z.string().regex(/^03\d{9}$/).optional(),
@@ -89,6 +94,7 @@ router.put('/students/:id', requireAdmin, async (req, res) => {
 // Delete any project
 router.delete('/projects/:id', requireAdmin, async (req, res) => {
   const id = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(id)) return res.status(400).json({ error: 'Invalid id' });
   try {
     const { data, error } = await adminClient
       .from('projects')
@@ -107,6 +113,7 @@ router.delete('/projects/:id', requireAdmin, async (req, res) => {
 // Delete a student (profile + cascades projects)
 router.delete('/students/:id', requireAdmin, async (req, res) => {
   const id = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(id)) return res.status(400).json({ error: 'Invalid id' });
   try {
     const { data, error } = await adminClient
       .from('profiles')
@@ -125,6 +132,7 @@ router.delete('/students/:id', requireAdmin, async (req, res) => {
 // List projects for a specific student id
 router.get('/students/:id/projects', requireAdmin, async (req, res) => {
   const id = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(id)) return res.status(400).json({ error: 'Invalid id' });
   try {
     const { data, error } = await adminClient
       .from('projects')
@@ -143,6 +151,7 @@ const commentSchema = z.object({ content: z.string().min(1).max(2000) });
 
 router.get('/projects/:id/comments', requireAdmin, async (req, res) => {
   const projectId = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(projectId)) return res.status(400).json({ error: 'Invalid id' });
   try {
     const { data, error } = await adminClient
       .from('project_comments')
@@ -156,8 +165,10 @@ router.get('/projects/:id/comments', requireAdmin, async (req, res) => {
   }
 });
 
+
 router.post('/projects/:id/comments', requireAdmin, async (req, res) => {
   const projectId = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(projectId)) return res.status(400).json({ error: 'Invalid id' });
   const parsed = commentSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid input' });
   try {
@@ -167,6 +178,24 @@ router.post('/projects/:id/comments', requireAdmin, async (req, res) => {
       .select('*')
       .single();
     if (error) throw error;
+    // Fetch project owner email
+    const { data: project, error: projErr } = await adminClient
+      .from('projects')
+      .select('id, user_id, title, owner:profiles(email, full_name)')
+      .eq('id', projectId)
+      .maybeSingle();
+    if (!projErr && project && (project as any).owner?.email) {
+      const owner = (project as any).owner;
+      const to = owner.email as string;
+      const name = (owner.full_name as string) || 'Student';
+      const subject = `New comment on your project: ${(project as any).title || 'Project'}`;
+      const text = `Hello ${name},\n\nAn admin added a comment on your project:\n\n"${parsed.data.content}"\n\nProject ID: ${projectId}\n\nRegards,\nStudent Portfolio`;
+      const html = renderCommentHtml({ studentName: name, projectTitle: (project as any).title || 'Project', comment: parsed.data.content, projectId, appUrl: process.env.APP_BASE_URL || 'https://student-portfolio-gppt.onrender.com/' });
+      try { await sendEmail(to, subject, text, html, process.env.REPLY_TO_EMAIL); } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('Comment email failed to send:', (e as any)?.message || e);
+      }
+    }
     return res.status(201).json(data);
   } catch (err: any) {
     return res.status(500).json({ error: err.message ?? 'Internal error' });
@@ -175,6 +204,7 @@ router.post('/projects/:id/comments', requireAdmin, async (req, res) => {
 
 router.delete('/projects/:projectId/comments/:commentId', requireAdmin, async (req, res) => {
   const { projectId, commentId } = req.params as any;
+  if (!/^[-a-f0-9]{36}$/i.test(projectId) || !/^[-a-f0-9]{36}$/i.test(commentId)) return res.status(400).json({ error: 'Invalid id' });
   try {
     const { data, error } = await adminClient
       .from('project_comments')
@@ -192,3 +222,32 @@ router.delete('/projects/:projectId/comments/:commentId', requireAdmin, async (r
 });
 
 export default router;
+
+// Password reset (admin sets a temporary new password)
+router.post('/students/:id/reset-password', requireAdmin, authLimiter, async (req, res) => {
+  const id = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(id)) return res.status(400).json({ error: 'Invalid id' });
+  const body = z.object({ newPassword: z.string().min(8) }).safeParse(req.body);
+  if (!body.success) return res.status(400).json({ error: 'Invalid input' });
+  try {
+    const { error } = await adminClient.auth.admin.updateUserById(id, { password: body.data.newPassword });
+    if (error) throw error;
+    return res.json({ message: 'Password reset' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message ?? 'Internal error' });
+  }
+});
+
+// Manually verify a student's email (admin action)
+router.post('/students/:id/verify-email', requireAdmin, authLimiter, async (req, res) => {
+  const id = req.params.id;
+  if (!/^[-a-f0-9]{36}$/i.test(id)) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    // Confirm the user's email using Supabase Admin API
+    const { error } = await adminClient.auth.admin.updateUserById(id, { email_confirm: true } as any);
+    if (error) throw error;
+    return res.json({ message: 'Email marked as verified' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message ?? 'Internal error' });
+  }
+});

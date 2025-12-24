@@ -1,26 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { fetchPublicProjects } from "@/lib/api";
-import { ProjectCard } from "@/components/portfolio/ProjectCard";
+import { useMemo, useState } from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { fetchPublicProjectsPage } from "@/lib/api";
+import NeoNav from "@/components/design3/NeoNav";
+
+import FilterBar from "@/components/design3/FilterBar";
+import NeoCard from "@/components/design3/NeoCard";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
-import { TopNav } from "@/components/layout/TopNav";
-import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Code, ExternalLink, Github } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import FadeIn from "@/components/FadeIn";
 
 const Index = () => {
-  const [isLoading, setIsLoading] = useState(true);
-  useEffect(() => {
-    // Placeholder while backend/API wiring is added
-    setIsLoading(false);
-  }, []);
-
   return (
-    <div className="min-h-screen bg-background">
-      <TopNav showHome={false} showAuth={true} />
+    <div className="min-h-screen bg-fixed bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
+      <main className="max-w-6xl mx-auto px-4 py-6 space-y-5">
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <NeoNav />
         <PublicProjectsSection />
       </main>
     </div>
@@ -28,37 +25,44 @@ const Index = () => {
 };
 
 const PublicProjectsSection = () => {
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['public-projects'],
-    queryFn: fetchPublicProjects,
+  const pageSize = 12;
+  const { data, isLoading, isError, error, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteQuery({
+    queryKey: ['public-projects', pageSize],
+    queryFn: ({ pageParam = 1 }) => fetchPublicProjectsPage(pageParam, pageSize),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => {
+      if (!lastPage || lastPage.length < pageSize) return undefined;
+      return allPages.length + 1;
+    },
   });
 
   const [search, setSearch] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [skills, setSkills] = useState<string[]>([]);
+  const [languages, setLanguages] = useState<string[]>([]);
+  const [specs, setSpecs] = useState<string[]>([]);
 
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(search), 300);
-    return () => clearTimeout(t);
-  }, [search]);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState<any | null>(null);
+
+  const flat = useMemo(() => (data?.pages || []).flatMap(p => p), [data]);
+  const allSkills = Array.from(new Set((flat || []).flatMap(p => p.technologies || []))).sort();
+  const allSpecs = Array.from(new Set((flat || []).map(p => p.projectType).filter(Boolean))) as string[];
 
   const filtered = useMemo(() => {
-    if (!data) return [] as typeof data;
-    const q = debouncedQuery.trim().toLowerCase();
-    if (!q) return data;
-    return data.filter((p) => {
-      const haystack = [
-        p.title,
-        p.projectType,
-        p.ownerName,
-        p.ownerRoll,
-        ...(p.technologies || []),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(q);
+    if (!flat) return [] as typeof flat;
+    const q = search.trim().toLowerCase();
+    return flat.filter((p) => {
+      const haystack = [p.title, p.projectType, p.ownerName, p.ownerRoll, ...(p.technologies || [])]
+        .filter(Boolean).join(' ').toLowerCase();
+      const matchesQ = !q || haystack.includes(q);
+      const matchesSkills = skills.length === 0 || skills.every(s => (p.technologies || []).includes(s));
+      const matchesLang = languages.length === 0 || languages.some(s => (p.technologies || []).includes(s));
+      const matchesSpec = specs.length === 0 || specs.some(s => (p.projectType || '').includes(s));
+      return matchesQ && matchesSkills && matchesLang && matchesSpec;
     });
-  }, [data, debouncedQuery]);
+  }, [flat, search, skills, languages, specs]);
+
+
 
   if (isLoading) {
     return (
@@ -77,7 +81,7 @@ const PublicProjectsSection = () => {
     );
   }
 
-  if (!data || data.length === 0) {
+  if (!flat || flat.length === 0) {
     return (
       <div className="text-center py-16">
         <div className="text-6xl mb-4">🗂️</div>
@@ -88,21 +92,16 @@ const PublicProjectsSection = () => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search by student name, roll number, title, technologies, or type..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-10 h-12 text-base"
-        />
-      </div>
+    <div className="space-y-4">
+      <FilterBar allSkills={allSkills} allLanguages={allSkills} allSpecializations={allSpecs}
+        onSearch={setSearch} onSkills={setSkills} onLanguages={setLanguages} onSpecializations={setSpecs} />
 
       {filtered && filtered.length > 0 ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
-          {filtered.map((project) => (
-            <ProjectCard key={project.id} project={project} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {filtered.map((project, idx) => (
+            <FadeIn key={project.id} delayMs={60 * (idx % 9)}>
+              <NeoCard project={project} onView={(p) => { setActive(p); setOpen(true); }} />
+            </FadeIn>
           ))}
         </div>
       ) : (
@@ -112,6 +111,102 @@ const PublicProjectsSection = () => {
           <p className="text-muted-foreground">Try a different query or clear the search.</p>
         </div>
       )}
+
+      <div className="flex justify-center py-4">
+        {hasNextPage && (
+          <Button onClick={() => fetchNextPage()} disabled={isFetchingNextPage} variant="outline">
+            {isFetchingNextPage ? 'Loading...' : 'Load more'}
+          </Button>
+        )}
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{active?.title}</DialogTitle>
+          </DialogHeader>
+          {active && (
+            <div className="space-y-3 text-sm">
+              <div className="text-muted-foreground">Status: <Badge variant="secondary">{active.status}</Badge></div>
+              {active.projectType && (
+                <div className="text-muted-foreground">Project Type: {active.projectType}</div>
+              )}
+              {/* Media preview */}
+              {active.imageUrl && (
+                <div>
+                  <div className="font-medium mb-1">Thumbnail</div>
+                  <div className="w-full rounded-lg overflow-hidden border bg-muted">
+                    <img
+                      src={active.imageUrl}
+                      alt={active.title}
+                      className="w-full h-64 object-cover"
+                    />
+                  </div>
+                </div>
+              )}
+              <div>
+                <div className="font-medium mb-1">Description</div>
+                <p className="leading-relaxed whitespace-pre-wrap">{active.description}</p>
+              </div>
+              {active.requirements ? (
+                <div>
+                  <div className="font-medium mb-1">Functional Requirements</div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm font-semibold mb-1">Planned</div>
+                      {active.requirements.planned.length > 0 ? (
+                        <ul className="list-disc pl-5 space-y-1">
+                          {active.requirements.planned.map((fr: string, idx: number) => (
+                            <li key={`planned-${idx}-${fr}`}>{fr}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="text-muted-foreground text-sm">None</div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold mb-1">Implemented</div>
+                      {active.requirements.implemented.length > 0 ? (
+                        <ul className="list-disc pl-5 space-y-1">
+                          {active.requirements.implemented.map((fr: string, idx: number) => (
+                            <li key={`impl-${idx}-${fr}`}>{fr}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="text-muted-foreground text-sm">None</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              <div>
+                <div className="flex items-center gap-2 mb-1"><Code className="h-4 w-4 text-muted-foreground" /><span className="font-medium">Technologies</span></div>
+                <div className="flex flex-wrap gap-1">
+                  {(active.technologies || []).map((t: string) => (
+                    <Badge key={t} variant="outline">{t}</Badge>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {active.deploymentUrl && (
+                  <Button size="sm" asChild>
+                    <a href={active.deploymentUrl} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-4 w-4 mr-2" /> Live Demo
+                    </a>
+                  </Button>
+                )}
+                {active.githubUrl && (
+                  <Button size="sm" variant="outline" asChild>
+                    <a href={active.githubUrl} target="_blank" rel="noopener noreferrer">
+                      <Github className="h-4 w-4 mr-2" /> Source Code
+                    </a>
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

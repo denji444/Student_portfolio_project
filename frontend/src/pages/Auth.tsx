@@ -1,29 +1,49 @@
 import { useState } from 'react';
 import { z } from 'zod';
 import { useMutation } from '@tanstack/react-query';
-import { signup, signin } from '@/lib/api';
+import { signup, signin, startGoogleOAuth } from '@/lib/api';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Link, useNavigate } from 'react-router-dom';
-import { TopNav } from '@/components/layout/TopNav';
+import { Eye, EyeOff } from 'lucide-react';
+import NeoNav from '@/components/design3/NeoNav';
+
+import { supabase } from '@/lib/supabaseClient';
+
+type SignupInput = Parameters<typeof signup>[0];
+type SigninInput = Parameters<typeof signin>[0];
 
 const signupSchema = z.object({
   fullName: z.string().min(1, 'Full name is required'),
-  rollNumber: z.string().regex(/^SET-\d{2}-\d{3}$/,'Format: SET-23-001'),
+  rollNumber: z.string().regex(/^SET-\d{2}-\d{3}$/, 'Format: SET-23-001'),
   email: z.string().email('Invalid email'),
-  phone: z.string().regex(/^03\d{9}$/,'Format: 03XXXXXXXXX'),
-  password: z.string().min(8,'Min 8 chars'),
-  confirmPassword: z.string().min(8,'Min 8 chars'),
+  phone: z.string().regex(/^03\d{9}$/, 'Format: 03XXXXXXXXX'),
+  password: z.string().regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/, 'Password must be at least 8 characters and include uppercase, lowercase, number, and special character'),
+  confirmPassword: z.string().min(8, 'Min 8 chars'),
 }).refine(d => d.password === d.confirmPassword, { path: ['confirmPassword'], message: 'Passwords do not match' });
 
 const signinSchema = z.object({
   email: z.string().email('Invalid email'),
-  password: z.string().min(8,'Min 8 chars'),
+  password: z.string().min(8, 'Min 8 chars'),
 });
 
-const Field = ({label, required=false, children}:{label:string;required?:boolean;children:any}) => (
+type SignupForm = z.infer<typeof signupSchema>;
+type SigninForm = z.infer<typeof signinSchema>;
+
+function passwordStrength(p: string): { score: number; label: string } {
+  const lengthOk = p.length >= 8;
+  const hasLower = /[a-z]/.test(p);
+  const hasUpper = /[A-Z]/.test(p);
+  const hasNumber = /\d/.test(p);
+  const hasSpecial = /[^A-Za-z0-9]/.test(p);
+  const score = [lengthOk, hasLower, hasUpper, hasNumber, hasSpecial].filter(Boolean).length;
+  const label = score <= 2 ? 'Weak' : score === 3 || score === 4 ? 'Medium' : 'Strong';
+  return { score, label };
+}
+
+const Field = ({ label, required = false, children }: { label: string; required?: boolean; children: any }) => (
   <div className="space-y-1">
     <label className="text-sm font-medium text-foreground">
       {label} {required && <span style={{ color: '#ed1f11' }}>*</span>}
@@ -35,28 +55,39 @@ const Field = ({label, required=false, children}:{label:string;required?:boolean
 const Auth = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<'signin'|'signup'>('signup');
-  const [signupForm, setSignupForm] = useState({ fullName:'', rollNumber:'', email:'', phone:'', password:'', confirmPassword:'' });
-  const [signinForm, setSigninForm] = useState({ email:'', password:'' });
+  const [mode, setMode] = useState<'signin' | 'signup'>('signup');
+  const [signupForm, setSignupForm] = useState<SignupForm>({ fullName: '', rollNumber: '', email: '', phone: '', password: '', confirmPassword: '' });
+  const [signinForm, setSigninForm] = useState<SigninForm>({ email: '', password: '' });
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showSignupConfirm, setShowSignupConfirm] = useState(false);
+  const [showSigninPassword, setShowSigninPassword] = useState(false);
+  const pw = signupForm.password;
+  const { score: pwScore, label: pwLabel } = passwordStrength(pw);
 
-  const signupMutation = useMutation({
+  const signupMutation = useMutation<{ message: string }, Error, SignupInput>({
     mutationFn: signup,
     onSuccess: () => {
-      toast({ title: 'Account created', description: 'You can now sign in.' });
-      setMode('signin');
+      toast({ title: 'Account created' });
+      navigate(`/verify-email?email=${encodeURIComponent(signupForm.email)}`);
     },
     onError: (e: any) => toast({ title: 'Signup failed', description: e.message, variant: 'destructive' }),
   });
 
-  const signinMutation = useMutation({
+  const signinMutation = useMutation<{ message: string }, Error, SigninInput>({
     mutationFn: signin,
-    onSuccess: (res) => {
-      localStorage.setItem('accessToken', res.accessToken);
-      if (res.refreshToken) localStorage.setItem('refreshToken', res.refreshToken);
+    onSuccess: () => {
       toast({ title: 'Signed in' });
       navigate('/dashboard');
     },
-    onError: (e: any) => toast({ title: 'Signin failed', description: e.message, variant: 'destructive' }),
+    onError: (e: any) => {
+      const message = e?.message || '';
+      if (message.toLowerCase().includes('not verified')) {
+        toast({ title: 'Email not verified', description: 'Please check your inbox for the verification email.' });
+        navigate(`/verify-email?email=${encodeURIComponent(signinForm.email)}`);
+        return;
+      }
+      toast({ title: 'Signin failed', description: message, variant: 'destructive' });
+    },
   });
 
   const handleSignup = (e: React.FormEvent) => {
@@ -67,7 +98,12 @@ const Auth = () => {
       toast({ title: 'Validation error', description: msg, variant: 'destructive' });
       return;
     }
-    signupMutation.mutate(parsed.data);
+    signupMutation.mutate(parsed.data as SignupInput);
+  };
+
+  const handleGoogle = () => {
+    // After success, backend redirects to /dashboard by default
+    startGoogleOAuth('/dashboard');
   };
 
   const handleSignin = (e: React.FormEvent) => {
@@ -78,57 +114,122 @@ const Auth = () => {
       toast({ title: 'Validation error', description: msg, variant: 'destructive' });
       return;
     }
-    signinMutation.mutate(parsed.data);
+    signinMutation.mutate(parsed.data as SigninInput);
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <TopNav showHome={true} showAuth={false} />
-      <div className="flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <div className="flex gap-2">
-              <Button variant={mode==='signup'?'default':'outline'} onClick={()=>setMode('signup')}>Sign up</Button>
-              <Button variant={mode==='signin'?'default':'outline'} onClick={()=>setMode('signin')}>Sign in</Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {mode==='signup' ? (
-              <form className="space-y-3" onSubmit={handleSignup}>
-                <Field label="Full name" required>
-                  <Input value={signupForm.fullName} onChange={e=>setSignupForm({...signupForm, fullName:e.target.value})} />
-                </Field>
-                <Field label="Roll no." required>
-                  <Input placeholder="SET-23-001" value={signupForm.rollNumber} onChange={e=>setSignupForm({...signupForm, rollNumber:e.target.value})} />
-                </Field>
-                <Field label="Email" required>
-                  <Input type="email" value={signupForm.email} onChange={e=>setSignupForm({...signupForm, email:e.target.value})} />
-                </Field>
-                <Field label="Phone no" required>
-                  <Input placeholder="03XXXXXXXXX" value={signupForm.phone} onChange={e=>setSignupForm({...signupForm, phone:e.target.value})} />
-                </Field>
-                <Field label="Password" required>
-                  <Input type="password" value={signupForm.password} onChange={e=>setSignupForm({...signupForm, password:e.target.value})} />
-                </Field>
-                <Field label="Confirm password" required>
-                  <Input type="password" value={signupForm.confirmPassword} onChange={e=>setSignupForm({...signupForm, confirmPassword:e.target.value})} />
-                </Field>
-                <Button type="submit" className="w-full" disabled={signupMutation.isLoading}>Create account</Button>
-              </form>
-            ) : (
-              <form className="space-y-3" onSubmit={handleSignin}>
-                <Field label="Email" required>
-                  <Input type="email" value={signinForm.email} onChange={e=>setSigninForm({...signinForm, email:e.target.value})} />
-                </Field>
-                <Field label="Password" required>
-                  <Input type="password" value={signinForm.password} onChange={e=>setSigninForm({...signinForm, password:e.target.value})} />
-                </Field>
-                <Button type="submit" className="w-full" disabled={signinMutation.isLoading}>Sign in</Button>
-              </form>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+    <div className="min-h-screen bg-fixed bg-[linear-gradient(180deg,#f6f7fb_0%,#fff_40%,#ffe4b5_100%)]">
+      <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+
+        <NeoNav />
+        <div className="flex items-center justify-center">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <div className="flex gap-2">
+                <Button variant={mode === 'signup' ? 'default' : 'outline'} onClick={() => setMode('signup')}>Sign up</Button>
+                <Button variant={mode === 'signin' ? 'default' : 'outline'} onClick={() => setMode('signin')}>Sign in</Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {mode === 'signup' ? (
+                <form className="space-y-3" onSubmit={handleSignup}>
+                  <Field label="Full name" required>
+                    <Input value={signupForm.fullName} onChange={e => setSignupForm({ ...signupForm, fullName: e.target.value })} />
+                  </Field>
+                  <Field label="Roll no." required>
+                    <Input placeholder="SET-23-001" value={signupForm.rollNumber} onChange={e => setSignupForm({ ...signupForm, rollNumber: e.target.value })} />
+                  </Field>
+                  <Field label="Email" required>
+                    <Input type="email" value={signupForm.email} onChange={e => setSignupForm({ ...signupForm, email: e.target.value })} />
+                  </Field>
+                  <Field label="Phone no" required>
+                    <Input placeholder="03XXXXXXXXX" value={signupForm.phone} onChange={e => setSignupForm({ ...signupForm, phone: e.target.value })} />
+                  </Field>
+                  <Field label="Password" required>
+                    <div className="relative">
+                      <Input type={showSignupPassword ? 'text' : 'password'} value={signupForm.password} onChange={e => setSignupForm({ ...signupForm, password: e.target.value })} className="pr-10" />
+                      <button type="button" className="absolute inset-y-0 right-0 px-3 text-muted-foreground" onClick={() => setShowSignupPassword(v => !v)} aria-label={showSignupPassword ? 'Hide password' : 'Show password'}>
+                        {showSignupPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <div className="mt-2">
+                      <div className="h-1.5 w-full rounded bg-muted overflow-hidden">
+                        <div
+                          className="h-full transition-all"
+                          style={{
+                            width: `${Math.min(pwScore, 5) * 20}%`,
+                            backgroundColor: pwScore <= 2 ? '#ef4444' : pwScore <= 4 ? '#f59e0b' : '#22c55e',
+                          }}
+                        />
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">Strength: {pw ? pwLabel : '—'}</div>
+                    </div>
+                  </Field>
+                  <Field label="Confirm password" required>
+                    <div className="relative">
+                      <Input type={showSignupConfirm ? 'text' : 'password'} value={signupForm.confirmPassword} onChange={e => setSignupForm({ ...signupForm, confirmPassword: e.target.value })} className="pr-10" />
+                      <button type="button" className="absolute inset-y-0 right-0 px-3 text-muted-foreground" onClick={() => setShowSignupConfirm(v => !v)} aria-label={showSignupConfirm ? 'Hide password' : 'Show password'}>
+                        {showSignupConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </Field>
+                  <Button type="submit" className="w-full" disabled={signupMutation.isPending}>Create account</Button>
+                  <div className="relative my-2">
+                    <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-white px-2 text-muted-foreground">or</span>
+                    </div>
+                  </div>
+                  <Button type="button" variant="outline" className="w-full gap-2 flex items-center justify-center" onClick={handleGoogle}>
+                    <img
+                      src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                      alt="Google"
+                      className="h-5 w-5"
+                      loading="eager"
+                      decoding="async"
+                    />
+                    <span>Continue with Google</span>
+                  </Button>
+                </form>
+              ) : (
+                <form className="space-y-3" onSubmit={handleSignin}>
+                  <Field label="Email" required>
+                    <Input type="email" value={signinForm.email} onChange={e => setSigninForm({ ...signinForm, email: e.target.value })} />
+                  </Field>
+                  <Field label="Password" required>
+                    <div className="relative">
+                      <Input type={showSigninPassword ? 'text' : 'password'} value={signinForm.password} onChange={e => setSigninForm({ ...signinForm, password: e.target.value })} className="pr-10" />
+                      <button type="button" className="absolute inset-y-0 right-0 px-3 text-muted-foreground" onClick={() => setShowSigninPassword(v => !v)} aria-label={showSigninPassword ? 'Hide password' : 'Show password'}>
+                        {showSigninPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </Field>
+                  <div className="text-right text-sm">
+                    <Link to="/reset-password" className="underline text-muted-foreground">Forgot password?</Link>
+                  </div>
+                  <Button type="submit" className="w-full" disabled={signinMutation.isPending}>Sign in</Button>
+                  <div className="relative my-2">
+                    <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-white px-2 text-muted-foreground">or</span>
+                    </div>
+                  </div>
+                  <Button type="button" variant="outline" className="w-full gap-2 flex items-center justify-center" onClick={handleGoogle}>
+                    <img
+                      src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                      alt="Google"
+                      className="h-5 w-5"
+                      loading="eager"
+                      decoding="async"
+                    />
+                    <span>Continue with Google</span>
+                  </Button>
+                </form>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </main>
     </div>
   );
 };

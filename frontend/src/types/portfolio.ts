@@ -3,9 +3,10 @@ export interface Project {
   title: string;
   description: string;
   technologies: string[];
+  functionalRequirements?: string[];
+  requirements?: { planned: string[]; implemented: string[] };
   projectType?: string;
   imageUrl?: string;
-  videoUrl?: string;
   deploymentUrl?: string;
   githubUrl?: string;
   completionDate: string;

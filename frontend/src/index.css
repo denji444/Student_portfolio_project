@@ -144,6 +144,21 @@
   }
 }
 
+/* Hide native password reveal/clear icons (Edge/IE) to prevent double-eye buttons */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Best-effort: hide any webkit autofill/reveal controls if present */
+input[type="password"]::-webkit-credentials-auto-fill-button {
+  visibility: hidden;
+  display: none;
+  pointer-events: none;
+}
+
 /* Font utility classes */
 .libre-baskerville-regular {
   font-family: "Libre Baskerville", serif;

@@ -1,12 +1,17 @@
 import type { Project } from '@/types/portfolio';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string;
+// Resolve API base URL for dev/prod.
+// Prefer relative path by default so Vite dev proxy can handle /api and keep cookies first-party.
+// Allow override via VITE_API_BASE_URL when deploying or using a different origin.
+const envUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
+const API_BASE_URL = envUrl || '';
 
 type PublicProjectApi = {
   id: string;
   title: string;
   description: string;
   technologies: string[];
+  functionalRequirements?: string[];
   projectType?: string;
   githubUrl?: string;
   deploymentUrl?: string;
@@ -15,7 +20,8 @@ type PublicProjectApi = {
   status: 'completed' | 'in-progress' | 'planned';
   createdAt: string;
   owner?: { full_name?: string; roll_number?: string; email?: string; profile_image_url?: string | null } | null;
-  comments: string[];
+  comments: { id: string; content: string; created_at: string }[];
+  requirements?: { planned: string[]; implemented: string[] };
 };
 
 export async function fetchPublicProjects(): Promise<Project[]> {
@@ -28,15 +34,17 @@ export async function fetchPublicProjects(): Promise<Project[]> {
     title: p.title,
     description: p.description,
     technologies: p.technologies ?? [],
+    functionalRequirements: p.functionalRequirements ?? p.functional_requirements ?? [],
     projectType: p.projectType ?? p.project_type ?? undefined,
     githubUrl: p.githubUrl ?? p.github_url ?? undefined,
     deploymentUrl: p.deploymentUrl ?? p.deployment_url ?? undefined,
     imageUrl: p.imageUrl ?? p.image_url ?? undefined,
-    videoUrl: p.videoUrl ?? p.video_url ?? undefined,
+    videoUrl: undefined,
     status: p.status,
     createdAt: p.createdAt ?? p.created_at,
     owner: p.owner ?? null,
     comments: p.comments ?? [],
+    requirements: p.requirements ?? undefined,
   }));
   // Map to frontend Project type; use createdAt as completionDate display value
   return normalized.map((p) => ({
@@ -44,11 +52,13 @@ export async function fetchPublicProjects(): Promise<Project[]> {
     title: p.title,
     description: p.description,
     technologies: p.technologies,
+    functionalRequirements: p.functionalRequirements,
+     requirements: p.requirements,
     projectType: p.projectType,
     githubUrl: p.githubUrl,
     deploymentUrl: p.deploymentUrl,
     imageUrl: p.imageUrl,
-    videoUrl: p.videoUrl,
+    videoUrl: undefined,
     status: p.status,
     completionDate: new Date(p.createdAt).toLocaleDateString(),
     ownerName: p.owner?.full_name,
@@ -57,6 +67,59 @@ export async function fetchPublicProjects(): Promise<Project[]> {
     ownerImageUrl: p.owner?.profile_image_url ?? null,
     comments: p.comments,
   }));
+}
+
+// Paginated public projects fetcher to support "Load more" on the home page
+export async function fetchPublicProjectsPage(page: number = 1, pageSize: number = 20): Promise<Project[]> {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  const res = await fetch(`${API_BASE_URL}/api/projects/public?${params.toString()}`);
+  if (!res.ok) throw new Error('Failed to fetch public projects');
+  const data: any[] = await res.json();
+  const normalized: PublicProjectApi[] = data.map((p: any) => ({
+    id: p.id,
+    title: p.title,
+    description: p.description,
+    technologies: p.technologies ?? [],
+    functionalRequirements: p.functionalRequirements ?? p.functional_requirements ?? [],
+    projectType: p.projectType ?? p.project_type ?? undefined,
+    githubUrl: p.githubUrl ?? p.github_url ?? undefined,
+    deploymentUrl: p.deploymentUrl ?? p.deployment_url ?? undefined,
+    imageUrl: p.imageUrl ?? p.image_url ?? undefined,
+    videoUrl: undefined,
+    status: p.status,
+    createdAt: p.createdAt ?? p.created_at,
+    owner: p.owner ?? null,
+    comments: p.comments ?? [],
+    requirements: p.requirements ?? undefined,
+  }));
+  return normalized.map((p) => ({
+    id: p.id,
+    title: p.title,
+    description: p.description,
+    technologies: p.technologies,
+    functionalRequirements: p.functionalRequirements,
+    requirements: p.requirements,
+    projectType: p.projectType,
+    githubUrl: p.githubUrl,
+    deploymentUrl: p.deploymentUrl,
+    imageUrl: p.imageUrl,
+    videoUrl: undefined,
+    status: p.status,
+    completionDate: new Date(p.createdAt).toLocaleDateString(),
+    ownerName: p.owner?.full_name,
+    ownerRoll: p.owner?.roll_number,
+    ownerEmail: p.owner?.email,
+    ownerImageUrl: p.owner?.profile_image_url ?? null,
+    comments: p.comments,
+  }));
+}
+
+export function startGoogleOAuth(redirect: string = '/dashboard') {
+  const params = new URLSearchParams();
+  if (redirect) params.set('redirect', redirect);
+  // Use same API_BASE_URL resolution as above; empty string works with Vite proxy
+  const url = `${API_BASE_URL}/api/auth/oauth/google?${params.toString()}`;
+  window.location.href = url;
 }
 
 export async function signup(payload: {
@@ -68,59 +131,130 @@ export async function signup(payload: {
   confirmPassword: string;
 }): Promise<{ message: string }>
 {
-  const res = await fetch(`${API_BASE_URL}/api/auth/signup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || 'Signup failed');
-  return json;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+  
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      credentials: 'include',
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    
+    const json = await res.json();
+    if (!res.ok) {
+      if (res.status === 408) {
+        throw new Error('Request timeout. Please try again.');
+      } else if (res.status >= 500) {
+        throw new Error('Server error. Please try again in a few moments.');
+      } else {
+        throw new Error(json?.error || 'Signup failed');
+      }
+    }
+    return json;
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('Request timeout. Please check your connection and try again.');
+    }
+    throw error;
+  }
 }
 
-export async function signin(payload: {
-  email: string;
-  password: string;
-}): Promise<{ accessToken: string; refreshToken?: string }>
+export async function signin(payload: { email: string; password: string }): Promise<{ message: string }>
 {
   const res = await fetch(`${API_BASE_URL}/api/auth/signin`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+    credentials: 'include',
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json?.error || 'Signin failed');
-  return { accessToken: json.accessToken, refreshToken: json.refreshToken };
+  return { message: json?.message || 'Signed in' };
 }
 
-function authHeaders() {
-  const token = localStorage.getItem('accessToken');
-  return token ? { Authorization: `Bearer ${token}` } : {};
+export async function resendVerification(payload: { email: string }): Promise<{ message: string }>
+{
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+  
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/resend-verification`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    
+    const json = await res.json();
+    if (!res.ok) {
+      // Provide better error messages for common issues
+      if (res.status === 408) {
+        throw new Error('Request timeout. The email service may be temporarily unavailable. Please try again.');
+      } else if (res.status >= 500) {
+        throw new Error('Server error. Please try again in a few moments.');
+      } else {
+        throw new Error(json?.error || 'Failed to resend verification email');
+      }
+    }
+    return json;
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('Request timeout. Please check your connection and try again.');
+    }
+    throw error;
+  }
+}
+
+export async function requestPasswordReset(payload: { email: string }): Promise<{ message: string }>
+{
+  const res = await fetch(`${API_BASE_URL}/api/auth/password-reset/request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || 'Failed to request password reset');
+  return json;
+}
+
+export async function resetPassword(payload: { token: string; newPassword: string }): Promise<{ message: string }>
+{
+  const res = await fetch(`${API_BASE_URL}/api/auth/password-reset/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || 'Failed to reset password');
+  return json;
 }
 
 async function requestWithAuth(input: string, init: RequestInit = {}) {
   const res = await fetch(input, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init.headers || {}), ...authHeaders() },
+    headers: { 'Content-Type': 'application/json', ...(init.headers || {}) },
+    credentials: 'include',
   });
   if (res.status !== 401) return res;
-  // try refresh once
-  const refreshToken = localStorage.getItem('refreshToken');
-  if (!refreshToken) return res;
+  // try refresh once via cookies
   try {
     const refreshRes = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
+      credentials: 'include',
     });
     if (!refreshRes.ok) return res;
-    const tokens = await refreshRes.json();
-    if (tokens?.accessToken) localStorage.setItem('accessToken', tokens.accessToken);
-    if (tokens?.refreshToken) localStorage.setItem('refreshToken', tokens.refreshToken);
     // retry original
     return fetch(input, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...(init.headers || {}), ...authHeaders() },
+      headers: { 'Content-Type': 'application/json', ...(init.headers || {}) },
+      credentials: 'include',
     });
   } catch {
     return res;
@@ -129,12 +263,14 @@ async function requestWithAuth(input: string, init: RequestInit = {}) {
 
 export async function getMyProjects() {
   const res = await requestWithAuth(`${API_BASE_URL}/api/projects`, { method: 'GET' });
+  if (res.status === 401 || res.status === 403) throw new Error('UNAUTHORIZED');
   if (!res.ok) throw new Error('Failed to load your projects');
   return res.json();
 }
 
 export async function createProject(input: {
   title: string; description: string; technologies: string[];
+  functionalRequirements?: string[];
   projectType?: string; githubUrl?: string; deploymentUrl?: string; imageUrl?: string; videoUrl?: string; status?: 'completed'|'in-progress'|'planned';
 }) {
   const res = await requestWithAuth(`${API_BASE_URL}/api/projects`, { method: 'POST', body: JSON.stringify(input) });
@@ -145,6 +281,7 @@ export async function createProject(input: {
 
 export async function updateProject(id: string, input: Partial<{
   title: string; description: string; technologies: string[];
+  functionalRequirements?: string[];
   projectType?: string; githubUrl?: string; deploymentUrl?: string; imageUrl?: string; videoUrl?: string; status?: 'completed'|'in-progress'|'planned';
 }>) {
   const res = await requestWithAuth(`${API_BASE_URL}/api/projects/${id}`, { method: 'PUT', body: JSON.stringify(input) });
@@ -160,13 +297,44 @@ export async function deleteProject(id: string) {
   return json;
 }
 
+// Project Requirements API
+export async function listRequirements(projectId: string) {
+  const res = await requestWithAuth(`${API_BASE_URL}/api/projects/${projectId}/requirements`, { method: 'GET' });
+  if (res.status === 401 || res.status === 403) throw new Error('UNAUTHORIZED');
+  if (!res.ok) throw new Error('Failed to load requirements');
+  return res.json() as Promise<Array<{ id: string; project_id: string; content: string; status: 'planned'|'implemented'; created_at: string }>>;
+}
+
+export async function addRequirement(projectId: string, content: string, status: 'planned'|'implemented' = 'planned') {
+  const res = await requestWithAuth(`${API_BASE_URL}/api/projects/${projectId}/requirements`, { method: 'POST', body: JSON.stringify({ content, status }) });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || 'Failed to add requirement');
+  return json;
+}
+
+export async function updateRequirement(id: string, patch: Partial<{ content: string; status: 'planned'|'implemented' }>) {
+  const res = await requestWithAuth(`${API_BASE_URL}/api/projects/requirements/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || 'Failed to update requirement');
+  return json;
+}
+
+export async function deleteRequirement(id: string) {
+  const res = await requestWithAuth(`${API_BASE_URL}/api/projects/requirements/${id}`, { method: 'DELETE' });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || 'Failed to delete requirement');
+  return json;
+}
+
 export async function getMyProfile() {
   const res = await requestWithAuth(`${API_BASE_URL}/api/profile/me`, { method: 'GET' });
+  if (res.status === 401 || res.status === 403) throw new Error('UNAUTHORIZED');
+  if (res.status === 404) return null;
   if (!res.ok) throw new Error('Failed to load profile');
   return res.json();
 }
 
-export async function updateMyProfile(input: { fullName?: string; phone?: string; profileImageUrl?: string; avatarPath?: string }) {
+export async function updateMyProfile(input: { fullName?: string; rollNumber?: string; phone?: string; profileImageUrl?: string; avatarPath?: string }) {
   const res = await requestWithAuth(`${API_BASE_URL}/api/profile/me`, { method: 'PUT', body: JSON.stringify(input) });
   const json = await res.json();
   if (!res.ok) throw new Error(json?.error || 'Failed to update profile');

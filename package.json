@@ -8,11 +8,22 @@
   "scripts": {
     "dev": "concurrently -n FRONTEND,BACKEND -c green,blue \"npm --prefix frontend run dev\" \"npm --prefix backend run dev\"",
     "build": "npm --prefix frontend run build && npm --prefix backend run build",
-    "start": "npm --prefix backend run start"
+    "start": "npm --prefix backend run start",
+    "token:gmail": "node scripts/getTokenWithServer.js"
   },
   "devDependencies": {
+    "@types/cookie-parser": "^1.4.9",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/hpp": "^0.2.6",
+    "@types/multer": "^2.0.0",
+    "@types/nodemailer": "^7.0.1",
     "concurrently": "^9.1.2"
+  },
+  "dependencies": {
+    "google-auth-library": "^10.4.0",
+    "googleapis": "^161.0.0",
+    "open": "^10.2.0",
+    "server-destroy": "^1.0.1"
   }
 }
-
-
